@@ -1,5 +1,4 @@
-﻿
-using Domium.Domain.Abstraction;
+﻿using Domium.Domain.Abstractions.Entity;
 
 namespace Domium.Domain;
 

@@ -1,5 +1,5 @@
-﻿using Domium.Application.Abstraction.Query;
-using Domium.Application.Abstraction.Query.Pipelines;
+﻿using Domium.Application.Abstractions.Query;
+using Domium.Application.Abstractions.Query.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Application.Query;

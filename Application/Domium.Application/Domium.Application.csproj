@@ -15,7 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Chaching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
-    <ProjectReference Include="..\Domium.Application.Abstraction\Domium.Application.Abstraction.csproj" />
+    <ProjectReference Include="..\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

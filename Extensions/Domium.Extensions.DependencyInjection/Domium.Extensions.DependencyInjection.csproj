@@ -13,13 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Application\Domium.Application.Abstraction\Domium.Application.Abstraction.csproj" />
+    <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
     <ProjectReference Include="..\..\Application\Domium.Application\Domium.Application.csproj" />
     <ProjectReference Include="..\..\Chaching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\..\Chaching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
     <ProjectReference Include="..\..\Chaching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
     <ProjectReference Include="..\..\Chaching\Domium.Caching\Domium.Caching.csproj" />
-    <ProjectReference Include="..\..\Domain\Domium.Domain.Abstraction\Domium.Domain.Abstraction.csproj" />
+    <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
   </ItemGroup>
 

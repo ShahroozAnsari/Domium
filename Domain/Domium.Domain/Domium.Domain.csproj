@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Domium.Domain.Abstraction\Domium.Domain.Abstraction.csproj" />
+    <ProjectReference Include="..\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

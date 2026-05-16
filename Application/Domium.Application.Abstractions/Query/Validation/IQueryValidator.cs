@@ -1,7 +1,7 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
 
-namespace Domium.Application.Abstraction.Query.Validation;
+namespace Domium.Application.Abstractions.Query.Validation;
 
 public interface IQueryValidator<in TQuery, TResult>
 {

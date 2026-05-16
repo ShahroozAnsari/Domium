@@ -1,5 +1,5 @@
-﻿using Domium.Application.Abstraction.Command;
-using Domium.Application.Abstraction.Command.PipeLines;
+﻿using Domium.Application.Abstractions.Command;
+using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Persistence.Abstractions;
 
 namespace Domium.Application.Command.Pipelines.Behaviors;

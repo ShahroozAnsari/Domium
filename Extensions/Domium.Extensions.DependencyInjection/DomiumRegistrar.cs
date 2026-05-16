@@ -1,9 +1,9 @@
-﻿using Domium.Application.Abstraction.Command;
-using Domium.Application.Abstraction.Command.PipeLines;
-using Domium.Application.Abstraction.Command.Validation;
-using Domium.Application.Abstraction.Query;
-using Domium.Application.Abstraction.Query.Pipelines;
-using Domium.Application.Abstraction.Query.Validation;
+﻿using Domium.Application.Abstractions.Command;
+using Domium.Application.Abstractions.Command.PipeLines;
+using Domium.Application.Abstractions.Command.Validation;
+using Domium.Application.Abstractions.Query;
+using Domium.Application.Abstractions.Query.Pipelines;
+using Domium.Application.Abstractions.Query.Validation;
 using Domium.Application.Command;
 using Domium.Application.Command.Pipelines.Behaviors;
 using Domium.Application.Query;

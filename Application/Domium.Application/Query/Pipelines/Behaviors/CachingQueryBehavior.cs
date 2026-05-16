@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Domium.Application.Abstraction.Query;
-using Domium.Application.Abstraction.Query.Pipelines;
+using Domium.Application.Abstractions.Query;
+using Domium.Application.Abstractions.Query.Pipelines;
 using Domium.Caching.Abstractions.Models;
 using Domium.Caching.Abstractions.Providers;
 using Domium.Caching.Abstractions.Stores;
