@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Domium.Eventing.Abstractions.Internal;
+using Domium.Observability;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Eventing.Internal;
@@ -17,6 +19,15 @@ public sealed class InternalEventPublisher(IServiceProvider serviceProvider) : I
         {
             throw new ArgumentNullException(nameof(internalEvent));
         }
+
+        var eventName = internalEvent.GetType().FullName ?? internalEvent.GetType().Name;
+
+        using var activity = DomiumTelemetry.ActivitySource.StartActivity(
+            "domium.internal_event.publish",
+            ActivityKind.Internal);
+
+        activity?.SetTag("domium.event.name", eventName);
+        activity?.SetTag("domium.event.id", internalEvent.EventId);
 
         var handlerType = typeof(IInternalEventHandler<>).MakeGenericType(internalEvent.GetType());
         var handlers = serviceProvider.GetServices(handlerType);
@@ -39,5 +50,9 @@ public sealed class InternalEventPublisher(IServiceProvider serviceProvider) : I
                 await task.ConfigureAwait(false);
             }
         }
+
+        DomiumTelemetry.InternalEventsPublished.Add(
+            1,
+            new KeyValuePair<string, object?>("domium.event.name", eventName));
     }
 }
