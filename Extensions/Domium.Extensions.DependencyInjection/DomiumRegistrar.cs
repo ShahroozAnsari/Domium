@@ -6,6 +6,7 @@ using Domium.Application.Abstractions.Query.Pipelines;
 using Domium.Application.Abstractions.Query.Validation;
 using Domium.Application.Command;
 using Domium.Application.Command.Pipelines.Behaviors;
+using Domium.Application.Events;
 using Domium.Application.Query;
 using Domium.Application.Query.Pipelines.Behaviors;
 using Domium.Caching.Abstractions.Providers;
@@ -14,6 +15,7 @@ using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
 using Domium.Caching.Redis.Stores;
 using Domium.Extensions.DependencyInjection.Internal;
+using Domium.Domain.Abstractions.Events;
 using Domium.Tenancy.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -37,6 +39,7 @@ internal static class DomiumRegistrar
     {
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
+        services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
     }
 
     private static void RegisterApplicationTypes(IServiceCollection services)
@@ -64,6 +67,11 @@ internal static class DomiumRegistrar
                 .WithScopedLifetime()
 
                 .AddClasses(c => c.AssignableTo(typeof(IQueryValidator<,>)))
+                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+                .AsImplementedInterfaces()
+                .WithScopedLifetime()
+
+                .AddClasses(c => c.AssignableTo(typeof(IDomainEventHandler<>)))
                 .UsingRegistrationStrategy(RegistrationStrategy.Skip)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime()
@@ -119,6 +127,8 @@ internal static class DomiumRegistrar
 
     private static void RegisterCaching(IServiceCollection services, DomiumCachingOptions options)
     {
+        ValidateCachingOptions(options);
+
         services.TryAddSingleton(options);
 
         if (options.Provider == DomiumCacheProvider.Memory)
@@ -137,15 +147,35 @@ internal static class DomiumRegistrar
 
         services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
         services.TryAddSingleton<IDomiumQueryCachePolicyProvider, DomiumQueryCachePolicyProvider>();
-        services.TryAddSingleton<IDomiumCacheScopeProvider, DefaultDomiumCacheScopeProvider>();
+        services.TryAddScoped<IDomiumCacheScopeProvider, DefaultDomiumCacheScopeProvider>();
         services.TryAddSingleton<IDomiumCacheInvalidationMetadataProvider, DefaultDomiumCacheInvalidationMetadataProvider>();
-        services.TryAddSingleton<IDomiumCacheEntryOptionsFactory, DefaultDomiumCacheEntryOptionsFactory>();
-        services.TryAddSingleton<IDomiumTenantAccessor, DefaultDomiumTenantAccessor>();
+        services.TryAddSingleton<IDomiumCacheEntryOptionsFactory>(
+            _ => new DefaultDomiumCacheEntryOptionsFactory(options.DefaultExpiration));
+        services.TryAddScoped<IDomiumTenantAccessor, DefaultDomiumTenantAccessor>();
 
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped(
                 typeof(IQueryPipelineBehavior<,>),
                 typeof(CachingQueryBehavior<,>)));
+    }
+
+    private static void ValidateCachingOptions(DomiumCachingOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (options.DefaultExpiration <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.DefaultExpiration),
+                "Default cache expiration must be greater than zero.");
+        }
+
+        if (options.Provider == DomiumCacheProvider.Redis &&
+            string.IsNullOrWhiteSpace(options.RedisConnectionString))
+        {
+            throw new InvalidOperationException(
+                "Redis caching requires a non-empty Redis connection string.");
+        }
     }
 
     private static void ValidateHandlers(IServiceCollection services)

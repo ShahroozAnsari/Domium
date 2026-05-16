@@ -9,6 +9,8 @@ public sealed class CommandBus(IServiceProvider serviceProvider) : ICommandBus
     public Task ExecuteAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
         where TCommand : ICommand
     {
+        ArgumentNullException.ThrowIfNull(command);
+
         var handler = serviceProvider.GetRequiredService<ICommandHandler<TCommand>>();
         var behaviors = serviceProvider.GetServices<ICommandPipelineBehavior<TCommand>>().Reverse().ToArray();
 

@@ -24,6 +24,9 @@
     <ProjectReference Include="..\..\Extensions\Domium.Extensions.DependencyInjection\Domium.Extensions.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Domain\Domium.Domain\Domium.Domain.csproj" />
+    <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

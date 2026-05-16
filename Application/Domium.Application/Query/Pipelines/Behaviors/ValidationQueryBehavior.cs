@@ -10,9 +10,12 @@ public sealed class ValidationQueryBehavior<TQuery, TResult>(IEnumerable<IQueryV
 {
     public async Task<TResult> HandleAsync(
         TQuery query,
-
-        CancellationToken cancellationToken, QueryHandlerDelegate<TResult> next)
+        CancellationToken cancellationToken,
+        QueryHandlerDelegate<TResult> next)
     {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(next);
+
         foreach (var validator in validators)
         {
             await validator.ValidateAsync(query, cancellationToken).ConfigureAwait(false);

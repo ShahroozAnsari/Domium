@@ -146,6 +146,7 @@ namespace Domium.Caching.Memory.Stores
             }
 
             _memoryCache.Remove(key);
+            _index.RemoveKey(key);
             return Task.CompletedTask;
         }
 
@@ -164,9 +165,10 @@ namespace Domium.Caching.Memory.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var key in _index.GetKeysByTag(tag))
+            foreach (var key in _index.RemoveTag(tag))
             {
                 _memoryCache.Remove(key);
+                _index.RemoveKey(key);
             }
 
             return Task.CompletedTask;
@@ -187,9 +189,10 @@ namespace Domium.Caching.Memory.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var key in _index.GetKeysByEntityKey(entityKey))
+            foreach (var key in _index.RemoveEntityKey(entityKey))
             {
                 _memoryCache.Remove(key);
+                _index.RemoveKey(key);
             }
 
             return Task.CompletedTask;
@@ -210,9 +213,10 @@ namespace Domium.Caching.Memory.Stores
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            foreach (var key in _index.GetKeysByGroup(group))
+            foreach (var key in _index.RemoveGroup(group))
             {
                 _memoryCache.Remove(key);
+                _index.RemoveKey(key);
             }
 
             return Task.CompletedTask;

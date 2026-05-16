@@ -11,6 +11,8 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
         CancellationToken cancellationToken = default)
         where TQuery :class, IQuery<TResult> where TResult : class
     {
+        ArgumentNullException.ThrowIfNull(query);
+
         var handler = serviceProvider.GetRequiredService<IQueryHandler<TQuery, TResult>>();
         var behaviors = serviceProvider
             .GetServices<IQueryPipelineBehavior<TQuery, TResult>>()

@@ -61,6 +61,9 @@ namespace Domium.Application.Query.Pipelines.Behaviors
             CancellationToken cancellationToken,
             QueryHandlerDelegate<TResult> next)
         {
+            ArgumentNullException.ThrowIfNull(query);
+            ArgumentNullException.ThrowIfNull(next);
+
             var policy = _policyProvider.GetPolicy(typeof(TQuery));
 
             if (policy is null || !policy.Enabled)

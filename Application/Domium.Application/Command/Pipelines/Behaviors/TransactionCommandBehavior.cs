@@ -15,16 +15,19 @@ public sealed class TransactionCommandBehavior<TCommand>(IUnitOfWork unitOfWork)
         CancellationToken cancellationToken,
         CommandHandlerDelegate next)
     {
-        await _unitOfWork.BeginAsync(cancellationToken);
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(next);
+
+        await _unitOfWork.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            await next();
-            await _unitOfWork.CommitAsync(cancellationToken);
+            await next().ConfigureAwait(false);
+            await _unitOfWork.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            await _unitOfWork.RollbackAsync(cancellationToken);
+            await _unitOfWork.RollbackAsync(cancellationToken).ConfigureAwait(false);
             throw;
         }
     }

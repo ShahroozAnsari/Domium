@@ -57,6 +57,27 @@ public sealed class CachingRegistrationTests
     }
 
     [Fact]
+    public async Task UseCaching_applies_default_expiration_when_policy_has_no_expiration()
+    {
+        var cacheStore = new CapturingCacheStore();
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IDomiumCacheStore>(cacheStore);
+        services.AddDomium(options =>
+            options.UseCaching(cacheOptions =>
+                cacheOptions.DefaultExpiration = TimeSpan.FromMinutes(7)));
+
+        await using var provider = services.BuildServiceProvider();
+        RegisterPolicy(provider, DomiumQueryCacheScopeMode.Global);
+
+        var queryBus = provider.GetRequiredService<IQueryBus>();
+
+        await queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery());
+
+        Assert.Equal(TimeSpan.FromMinutes(7), cacheStore.EntryOptions?.AbsoluteExpirationRelativeToNow);
+    }
+
+    [Fact]
     public async Task Tenant_scoped_cache_policy_fails_clearly_without_tenant_context()
     {
         var services = new ServiceCollection();

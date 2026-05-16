@@ -13,6 +13,9 @@ public sealed class ValidationCommandBehavior<TCommand>(IEnumerable<ICommandVali
         CancellationToken cancellationToken,
         CommandHandlerDelegate next)
     {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(next);
+
         foreach (var validator in validators)
         {
             await validator.ValidateAsync(command, cancellationToken).ConfigureAwait(false);

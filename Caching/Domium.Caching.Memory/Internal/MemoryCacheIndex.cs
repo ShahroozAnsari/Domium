@@ -87,6 +87,24 @@ namespace Domium.Caching.Memory.Internal
         }
 
         /// <summary>
+        /// Removes a cache key from all reverse indexes.
+        /// </summary>
+        /// <param name="key">
+        /// The cache key.
+        /// </param>
+        public void RemoveKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            RemoveKeyFrom(_tags, key);
+            RemoveKeyFrom(_entityKeys, key);
+            RemoveKeyFrom(_groups, key);
+        }
+
+        /// <summary>
         /// Gets all keys associated with the specified entity key.
         /// </summary>
         /// <param name="entityKey">
@@ -112,6 +130,21 @@ namespace Domium.Caching.Memory.Internal
         public IReadOnlyCollection<string> GetKeysByGroup(string group)
         {
             return GetKeys(_groups, group);
+        }
+
+        public IReadOnlyCollection<string> RemoveTag(string tag)
+        {
+            return RemoveBucket(_tags, tag);
+        }
+
+        public IReadOnlyCollection<string> RemoveEntityKey(string entityKey)
+        {
+            return RemoveBucket(_entityKeys, entityKey);
+        }
+
+        public IReadOnlyCollection<string> RemoveGroup(string group)
+        {
+            return RemoveBucket(_groups, group);
         }
 
         private static void AddMany(
@@ -147,6 +180,35 @@ namespace Domium.Caching.Memory.Internal
             }
 
             return bucket.Keys.ToArray();
+        }
+
+        private static IReadOnlyCollection<string> RemoveBucket(
+            ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> source,
+            string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return Array.Empty<string>();
+            }
+
+            return source.TryRemove(value.Trim(), out var bucket)
+                ? bucket.Keys.ToArray()
+                : Array.Empty<string>();
+        }
+
+        private static void RemoveKeyFrom(
+            ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> source,
+            string key)
+        {
+            foreach (var bucket in source)
+            {
+                bucket.Value.TryRemove(key, out _);
+
+                if (bucket.Value.IsEmpty)
+                {
+                    source.TryRemove(bucket.Key, out _);
+                }
+            }
         }
     }
 }

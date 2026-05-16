@@ -9,6 +9,25 @@ namespace Domium.Caching.Providers
     /// </summary>
     public sealed class DefaultDomiumCacheEntryOptionsFactory : IDomiumCacheEntryOptionsFactory
     {
+        private readonly TimeSpan? _defaultAbsoluteExpirationRelativeToNow;
+
+        public DefaultDomiumCacheEntryOptionsFactory()
+        {
+        }
+
+        public DefaultDomiumCacheEntryOptionsFactory(TimeSpan? defaultAbsoluteExpirationRelativeToNow)
+        {
+            if (defaultAbsoluteExpirationRelativeToNow.HasValue &&
+                defaultAbsoluteExpirationRelativeToNow.Value <= TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(defaultAbsoluteExpirationRelativeToNow),
+                    "Default expiration must be greater than zero.");
+            }
+
+            _defaultAbsoluteExpirationRelativeToNow = defaultAbsoluteExpirationRelativeToNow;
+        }
+
         /// <summary>
         /// Creates cache entry options for the specified policy.
         /// </summary>
@@ -26,10 +45,8 @@ namespace Domium.Caching.Providers
             }
 
             return new DomiumCacheEntryOptions(
-                policy.AbsoluteExpirationRelativeToNow,
+                policy.AbsoluteExpirationRelativeToNow ?? _defaultAbsoluteExpirationRelativeToNow,
                 policy.SlidingExpiration);
         }
-
-
     }
 }

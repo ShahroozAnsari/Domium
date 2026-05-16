@@ -15,12 +15,22 @@ public sealed class LoggingCommandBehavior<TCommand>(ILogger<LoggingCommandBehav
         CancellationToken cancellationToken,
         CommandHandlerDelegate next)
     {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(next);
+
         var commandName = typeof(TCommand).Name;
 
         _logger.LogInformation("Executing command {CommandName}", commandName);
 
-        await next();
-
-        _logger.LogInformation("Executed command {CommandName}", commandName);
+        try
+        {
+            await next().ConfigureAwait(false);
+            _logger.LogInformation("Executed command {CommandName}", commandName);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Command {CommandName} failed", commandName);
+            throw;
+        }
     }
 }

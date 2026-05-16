@@ -15,14 +15,23 @@ public sealed class LoggingQueryBehavior<TQuery, TResult>(ILogger<LoggingQueryBe
         CancellationToken cancellationToken,
         QueryHandlerDelegate<TResult> next)
     {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(next);
+
         var queryName = typeof(TQuery).Name;
 
         _logger.LogInformation("Executing query {QueryName}", queryName);
 
-        var result = await next();
-
-        _logger.LogInformation("Executed query {QueryName}", queryName);
-
-        return result;
+        try
+        {
+            var result = await next().ConfigureAwait(false);
+            _logger.LogInformation("Executed query {QueryName}", queryName);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Query {QueryName} failed", queryName);
+            throw;
+        }
     }
 }
