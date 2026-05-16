@@ -30,6 +30,9 @@
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.EntityFrameworkCore\Domium.Persistence.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\..\Tenancy\Domium.Tenancy\Domium.Tenancy.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing\Domium.Eventing.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing.MassTransit\Domium.Eventing.MassTransit.csproj" />
   </ItemGroup>
 
 </Project>

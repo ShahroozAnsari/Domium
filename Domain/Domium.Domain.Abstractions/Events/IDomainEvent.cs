@@ -1,17 +1,10 @@
-﻿namespace Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions.Internal;
+
+namespace Domium.Domain.Abstractions.Events;
 
 /// <summary>
-/// Represents a domain event that occurred in the domain.
+/// Represents a domain event that occurred inside the current domain model.
 /// </summary>
-public interface IDomainEvent
+public interface IDomainEvent : IInternalEvent
 {
-    /// <summary>
-    /// Gets the unique identifier of the event.
-    /// </summary>
-    Guid EventId { get; }
-
-    /// <summary>
-    /// Gets the date and time when the event occurred.
-    /// </summary>
-    DateTimeOffset OccurredOn { get; }
 }

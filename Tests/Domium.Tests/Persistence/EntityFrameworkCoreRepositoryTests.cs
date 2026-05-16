@@ -84,15 +84,11 @@ public sealed class EntityFrameworkCoreRepositoryTests
         return services.BuildServiceProvider();
     }
 
-    private sealed class TestDbContext : DomiumDbContext
+    private sealed class TestDbContext(
+        DbContextOptions<TestDbContext> options,
+        IDomainEventDispatcher domainEventDispatcher)
+        : DomiumDbContext(options, domainEventDispatcher)
     {
-        public TestDbContext(
-            DbContextOptions<TestDbContext> options,
-            IDomainEventDispatcher domainEventDispatcher)
-            : base(options, domainEventDispatcher)
-        {
-        }
-
         public DbSet<Customer> Customers => Set<Customer>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -110,13 +106,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
         }
     }
 
-    private sealed class CustomerId : AggregateId<Guid>
-    {
-        public CustomerId(Guid value)
-            : base(value)
-        {
-        }
-    }
+    private sealed class CustomerId(Guid value) : AggregateId<Guid>(value);
 
     private sealed class Customer : AggregateRoot<CustomerId>
     {
@@ -144,14 +134,9 @@ public sealed class EntityFrameworkCoreRepositoryTests
         }
     }
 
-    private sealed class CustomerActivatedDomainEvent : DomainEvent
+    private sealed class CustomerActivatedDomainEvent(CustomerId customerId) : DomainEvent
     {
-        public CustomerActivatedDomainEvent(CustomerId customerId)
-        {
-            CustomerId = customerId;
-        }
-
-        public CustomerId CustomerId { get; }
+        public CustomerId CustomerId { get; } = customerId;
     }
 
     private sealed class ActiveCustomersSpecification : Specification<Customer>

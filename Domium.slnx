@@ -14,6 +14,11 @@
     <Project Path="Domain/Domium.Domain.Abstractions/Domium.Domain.Abstractions.csproj" Id="7a4cb13f-9762-4d77-8890-3a41d5d1cd20" />
     <Project Path="Domain/Domium.Domain/Domium.Domain.csproj" Id="377106fa-d889-4f2d-a50a-225786a49470" />
   </Folder>
+  <Folder Name="/Framework/Eventing/">
+    <Project Path="Eventing/Domium.Eventing.Abstractions/Domium.Eventing.Abstractions.csproj" />
+    <Project Path="Eventing/Domium.Eventing.MassTransit/Domium.Eventing.MassTransit.csproj" />
+    <Project Path="Eventing/Domium.Eventing/Domium.Eventing.csproj" />
+  </Folder>
   <Folder Name="/Framework/Extensions/">
     <Project Path="Extensions/Domium.Extensions.DependencyInjection/Domium.Extensions.DependencyInjection.csproj" Id="3bbbbabd-c2be-47d7-91ed-d5269ae8dac8" />
   </Folder>
@@ -23,6 +28,7 @@
   </Folder>
   <Folder Name="/Framework/Tenancy/">
     <Project Path="Tenancy/Domium.Tenancy.Abstractions/Domium.Tenancy.Abstractions.csproj" Id="f631e562-b419-4b43-96f0-c1be451a6517" />
+    <Project Path="Tenancy/Domium.Tenancy/Domium.Tenancy.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Domium.Tests/Domium.Tests.csproj" />

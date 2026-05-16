@@ -5,20 +5,14 @@ namespace Domium.Domain;
 /// <summary>
 /// Base type for domain events.
 /// </summary>
-public abstract class DomainEvent : IDomainEvent
+public abstract class DomainEvent(Guid eventId, DateTimeOffset occurredOn) : IDomainEvent
 {
     protected DomainEvent()
         : this(Guid.NewGuid(), DateTimeOffset.UtcNow)
     {
     }
 
-    protected DomainEvent(Guid eventId, DateTimeOffset occurredOn)
-    {
-        EventId = eventId;
-        OccurredOn = occurredOn;
-    }
+    public Guid EventId { get; } = eventId;
 
-    public Guid EventId { get; }
-
-    public DateTimeOffset OccurredOn { get; }
+    public DateTimeOffset OccurredOn { get; } = occurredOn;
 }

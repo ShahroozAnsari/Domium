@@ -16,6 +16,9 @@ using Domium.Caching.Providers;
 using Domium.Caching.Redis.Stores;
 using Domium.Extensions.DependencyInjection.Internal;
 using Domium.Domain.Abstractions.Events;
+using Domium.Eventing;
+using Domium.Eventing.Abstractions.External;
+using Domium.Eventing.Abstractions.Internal;
 using Domium.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -40,6 +43,7 @@ internal static class DomiumRegistrar
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
         services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
+        services.AddDomiumEventing();
         services.AddDomiumTenancy();
     }
 
@@ -73,6 +77,16 @@ internal static class DomiumRegistrar
                 .WithScopedLifetime()
 
                 .AddClasses(c => c.AssignableTo(typeof(IDomainEventHandler<>)))
+                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+                .AsImplementedInterfaces()
+                .WithScopedLifetime()
+
+                .AddClasses(c => c.AssignableTo(typeof(IInternalEventHandler<>)))
+                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+                .AsImplementedInterfaces()
+                .WithScopedLifetime()
+
+                .AddClasses(c => c.AssignableTo(typeof(IExternalEventHandler<>)))
                 .UsingRegistrationStrategy(RegistrationStrategy.Skip)
                 .AsImplementedInterfaces()
                 .WithScopedLifetime()

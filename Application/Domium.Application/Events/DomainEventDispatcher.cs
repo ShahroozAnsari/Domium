@@ -1,4 +1,5 @@
 using Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions.Internal;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Application.Events;
@@ -14,9 +15,17 @@ public sealed class DomainEventDispatcher(IServiceProvider serviceProvider) : ID
     {
         ArgumentNullException.ThrowIfNull(domainEvents);
 
+        var internalEventPublisher = serviceProvider.GetService<IInternalEventPublisher>();
+
         foreach (var domainEvent in domainEvents)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (internalEventPublisher is not null)
+            {
+                await internalEventPublisher.PublishAsync(domainEvent, cancellationToken).ConfigureAwait(false);
+            }
+
             await DispatchSingleAsync(domainEvent, cancellationToken).ConfigureAwait(false);
         }
     }

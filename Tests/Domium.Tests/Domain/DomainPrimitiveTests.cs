@@ -42,46 +42,23 @@ public sealed class DomainPrimitiveTests
         Assert.Empty(customer.DomainEvents);
     }
 
-    private sealed class CustomerId : AggregateId<Guid>
-    {
-        public CustomerId(Guid value)
-            : base(value)
-        {
-        }
-    }
+    private sealed class CustomerId(Guid value) : AggregateId<Guid>(value);
 
-    private sealed class Customer : AggregateRoot<CustomerId>
+    private sealed class Customer(CustomerId id) : AggregateRoot<CustomerId>(id)
     {
-        public Customer(CustomerId id)
-            : base(id)
-        {
-        }
-
         public void Activate()
         {
             RaiseDomainEvent(new CustomerActivatedDomainEvent(Id));
         }
     }
 
-    private sealed class Order : EntityBase<CustomerId>
+    private sealed class Order(CustomerId id) : EntityBase<CustomerId>(id);
+
+    private sealed class Money(string currency, decimal amount) : ValueObject
     {
-        public Order(CustomerId id)
-            : base(id)
-        {
-        }
-    }
+        public string Currency { get; } = currency;
 
-    private sealed class Money : ValueObject
-    {
-        public Money(string currency, decimal amount)
-        {
-            Currency = currency;
-            Amount = amount;
-        }
-
-        public string Currency { get; }
-
-        public decimal Amount { get; }
+        public decimal Amount { get; } = amount;
 
         protected override IEnumerable<object?> GetEqualityComponents()
         {
@@ -90,13 +67,8 @@ public sealed class DomainPrimitiveTests
         }
     }
 
-    private sealed class CustomerActivatedDomainEvent : DomainEvent
+    private sealed class CustomerActivatedDomainEvent(CustomerId customerId) : DomainEvent
     {
-        public CustomerActivatedDomainEvent(CustomerId customerId)
-        {
-            CustomerId = customerId;
-        }
-
-        public CustomerId CustomerId { get; }
+        public CustomerId CustomerId { get; } = customerId;
     }
 }

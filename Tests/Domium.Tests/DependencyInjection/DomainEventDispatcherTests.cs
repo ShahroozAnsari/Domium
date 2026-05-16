@@ -23,14 +23,9 @@ public sealed class DomainEventDispatcherTests
         Assert.Equal("ready", PingedHandler.LastMessage);
     }
 
-    public sealed class PingedDomainEvent : DomainEvent
+    public sealed class PingedDomainEvent(string message) : DomainEvent
     {
-        public PingedDomainEvent(string message)
-        {
-            Message = message;
-        }
-
-        public string Message { get; }
+        public string Message { get; } = message;
     }
 
     public sealed class PingedHandler : IDomainEventHandler<PingedDomainEvent>

@@ -5,14 +5,10 @@ namespace Domium.Tenancy;
 /// <summary>
 /// Creates scopes that temporarily set the ambient tenant context.
 /// </summary>
-public sealed class DomiumTenantScopeFactory : IDomiumTenantScopeFactory
+public sealed class DomiumTenantScopeFactory(IDomiumTenantContextAccessor tenantContextAccessor)
+    : IDomiumTenantScopeFactory
 {
-    private readonly IDomiumTenantContextAccessor _tenantContextAccessor;
-
-    public DomiumTenantScopeFactory(IDomiumTenantContextAccessor tenantContextAccessor)
-    {
-        _tenantContextAccessor = tenantContextAccessor ?? throw new ArgumentNullException(nameof(tenantContextAccessor));
-    }
+    private readonly IDomiumTenantContextAccessor _tenantContextAccessor = tenantContextAccessor ?? throw new ArgumentNullException(nameof(tenantContextAccessor));
 
     public IDisposable BeginScope(string tenantId)
     {
@@ -27,19 +23,12 @@ public sealed class DomiumTenantScopeFactory : IDomiumTenantScopeFactory
         return new TenantScope(_tenantContextAccessor, previous);
     }
 
-    private sealed class TenantScope : IDisposable
+    private sealed class TenantScope(
+        IDomiumTenantContextAccessor tenantContextAccessor,
+        DomiumTenantContext? previous)
+        : IDisposable
     {
-        private readonly IDomiumTenantContextAccessor _tenantContextAccessor;
-        private readonly DomiumTenantContext? _previous;
         private bool _disposed;
-
-        public TenantScope(
-            IDomiumTenantContextAccessor tenantContextAccessor,
-            DomiumTenantContext? previous)
-        {
-            _tenantContextAccessor = tenantContextAccessor;
-            _previous = previous;
-        }
 
         public void Dispose()
         {
@@ -48,13 +37,13 @@ public sealed class DomiumTenantScopeFactory : IDomiumTenantScopeFactory
                 return;
             }
 
-            if (_previous is null || !_previous.IsAvailable)
+            if (previous is null || !previous.IsAvailable)
             {
-                _tenantContextAccessor.ClearCurrent();
+                tenantContextAccessor.ClearCurrent();
             }
             else
             {
-                _tenantContextAccessor.SetCurrent(_previous);
+                tenantContextAccessor.SetCurrent(previous);
             }
 
             _disposed = true;

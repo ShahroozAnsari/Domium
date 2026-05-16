@@ -6,13 +6,8 @@ namespace Domium.Domain;
 /// Base type for entities that track creation and modification metadata.
 /// </summary>
 /// <typeparam name="TId">The identifier type.</typeparam>
-public abstract class AuditableEntityBase<TId> : EntityBase<TId>, IAuditableEntity
+public abstract class AuditableEntityBase<TId>(TId id) : EntityBase<TId>(id), IAuditableEntity
 {
-    protected AuditableEntityBase(TId id)
-        : base(id)
-    {
-    }
-
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset? ModifiedAt { get; private set; }

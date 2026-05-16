@@ -118,14 +118,9 @@ public sealed class CachingRegistrationTests
     {
     }
 
-    public sealed class CountingResult
+    public sealed class CountingResult(int value)
     {
-        public CountingResult(int value)
-        {
-            Value = value;
-        }
-
-        public int Value { get; }
+        public int Value { get; } = value;
     }
 
     public sealed class CountingQueryHandler : IQueryHandler<CountingQuery, CountingResult>

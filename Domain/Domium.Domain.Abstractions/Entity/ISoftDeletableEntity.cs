@@ -15,7 +15,7 @@ public interface ISoftDeletableEntity
     /// Gets the UTC date and time when the entity was deleted.
     /// Null if the entity is not deleted.
     /// </summary>
-    DateTimeOffset? DeletedAtUtc { get; }
+    DateTimeOffset? DeletedAt { get; }
 
     /// <summary>
     /// Gets the identifier of the user who deleted the entity.

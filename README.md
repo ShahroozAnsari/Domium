@@ -11,6 +11,9 @@ Domium is a lightweight DDD/CQRS foundation for .NET applications. It provides d
 - `Persistence/Domium.Persistence.Abstractions`: repository, unit-of-work, and specification contracts.
 - `Persistence/Domium.Persistence.EntityFrameworkCore`: EF Core repository, unit-of-work, specification evaluator, and DbContext base.
 - `Caching/*`: cache policy abstractions and memory/Redis cache stores.
+- `Eventing/Domium.Eventing.Abstractions`: provider-neutral internal/external event contracts.
+- `Eventing/Domium.Eventing`: in-process internal event publishing and default external event no-op publisher.
+- `Eventing/Domium.Eventing.MassTransit`: MassTransit external event publisher and consumer adapter.
 - `Tenancy/Domium.Tenancy.Abstractions`: tenant context access used by tenant-scoped caching.
 - `Tenancy/Domium.Tenancy`: AsyncLocal tenant context and disposable tenant scopes.
 - `Extensions/Domium.Extensions.DependencyInjection`: the `AddDomium` registration entry point.
@@ -43,6 +46,17 @@ For ambient tenant scopes:
 
 ```csharp
 using var scope = tenantScopeFactory.BeginScope("tenant-42");
+```
+
+For external events with MassTransit:
+
+```csharp
+services.AddDomiumMassTransitEventing();
+services.AddMassTransit(configurator =>
+{
+    configurator.AddDomiumExternalEventConsumer<OrderSubmitted>();
+    configurator.UsingRabbitMq((context, cfg) => cfg.ConfigureEndpoints(context));
+});
 ```
 
 Application assemblies can then define:

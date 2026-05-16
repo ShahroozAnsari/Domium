@@ -7,14 +7,9 @@ namespace Domium.Domain;
 /// Base type for aggregate roots that record domain events.
 /// </summary>
 /// <typeparam name="TId">The aggregate identifier type.</typeparam>
-public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
+public abstract class AggregateRoot<TId>(TId id) : EntityBase<TId>(id), IAggregateRoot<TId>
 {
     private readonly List<IDomainEvent> _domainEvents = new();
-
-    protected AggregateRoot(TId id)
-        : base(id)
-    {
-    }
 
     public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
