@@ -22,6 +22,10 @@
   <Folder Name="/Framework/Extensions/">
     <Project Path="Extensions/Domium.Extensions.DependencyInjection/Domium.Extensions.DependencyInjection.csproj" Id="3bbbbabd-c2be-47d7-91ed-d5269ae8dac8" />
   </Folder>
+  <Folder Name="/Framework/Observability/">
+    <Project Path="Observability/Domium.Observability.OpenTelemetry/Domium.Observability.OpenTelemetry.csproj" />
+    <Project Path="Observability/Domium.Observability/Domium.Observability.csproj" />
+  </Folder>
   <Folder Name="/Framework/Persistence/">
     <Project Path="Persistence/Domium.Persistence.Abstractions/Domium.Persistence.Abstractions.csproj" Id="3c70d12c-9f34-444c-aa6c-a4d4c97f3bd3" />
     <Project Path="Persistence/Domium.Persistence.EntityFrameworkCore/Domium.Persistence.EntityFrameworkCore.csproj" />
