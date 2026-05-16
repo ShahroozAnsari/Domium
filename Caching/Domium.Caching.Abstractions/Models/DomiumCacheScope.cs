@@ -7,7 +7,7 @@ namespace Domium.Caching.Abstractions.Models
     /// </summary>
     public sealed class DomiumCacheScope
     {
-        private DomiumCacheScope(DomiumCacheScopeKind kind, string tenantId)
+        private DomiumCacheScope(DomiumCacheScopeKind kind, string? tenantId)
         {
             Kind = kind;
             TenantId = tenantId;
@@ -21,7 +21,7 @@ namespace Domium.Caching.Abstractions.Models
         /// <summary>
         /// Gets the tenant identifier when the scope is tenant-specific.
         /// </summary>
-        public string TenantId { get; }
+        public string? TenantId { get; }
 
         /// <summary>
         /// Creates a global cache scope.

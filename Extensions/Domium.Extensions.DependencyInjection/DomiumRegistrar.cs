@@ -9,17 +9,17 @@ using Domium.Application.Command.Pipelines.Behaviors;
 using Domium.Application.Query;
 using Domium.Application.Query.Pipelines.Behaviors;
 using Domium.Caching.Abstractions.Providers;
-using Domium.Caching.Abstractions.Providers;
-using Domium.Caching.Abstractions.Results;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
 using Domium.Caching.Redis.Stores;
 using Domium.Extensions.DependencyInjection.Internal;
+using Domium.Tenancy.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyModel;
 using Scrutor;
+using StackExchange.Redis;
 
 namespace Domium.Extensions.DependencyInjection;
 
@@ -129,12 +129,18 @@ internal static class DomiumRegistrar
         }
         else if (options.Provider == DomiumCacheProvider.Redis)
         {
+            services.TryAddSingleton<IConnectionMultiplexer>(
+                _ => ConnectionMultiplexer.Connect(options.RedisConnectionString));
+
             services.TryAddSingleton<IDomiumCacheStore, RedisDomiumCacheStore>();
         }
 
         services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
-
         services.TryAddSingleton<IDomiumQueryCachePolicyProvider, DomiumQueryCachePolicyProvider>();
+        services.TryAddSingleton<IDomiumCacheScopeProvider, DefaultDomiumCacheScopeProvider>();
+        services.TryAddSingleton<IDomiumCacheInvalidationMetadataProvider, DefaultDomiumCacheInvalidationMetadataProvider>();
+        services.TryAddSingleton<IDomiumCacheEntryOptionsFactory, DefaultDomiumCacheEntryOptionsFactory>();
+        services.TryAddSingleton<IDomiumTenantAccessor, DefaultDomiumTenantAccessor>();
 
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped(

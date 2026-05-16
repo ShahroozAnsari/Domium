@@ -13,6 +13,6 @@ namespace Domium.Tenancy.Abstractions
         /// <returns>
         /// The current tenant context.
         /// </returns>
-        DomiumTenantContext GetCurrent();
+        DomiumTenantContext? GetCurrent();
     }
 }

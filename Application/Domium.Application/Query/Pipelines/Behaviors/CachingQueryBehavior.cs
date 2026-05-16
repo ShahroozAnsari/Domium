@@ -24,6 +24,7 @@ namespace Domium.Application.Query.Pipelines.Behaviors
         private readonly IDomiumQueryCachePolicyProvider _policyProvider;
         private readonly IDomiumCacheScopeProvider _scopeProvider;
         private readonly IDomiumCacheInvalidationMetadataProvider _invalidationMetadataProvider;
+        private readonly IDomiumCacheEntryOptionsFactory _entryOptionsFactory;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CachingQueryBehavior{TQuery, TResult}"/> class.
@@ -37,13 +38,15 @@ namespace Domium.Application.Query.Pipelines.Behaviors
             IDomiumCacheKeyProvider cacheKeyProvider,
             IDomiumQueryCachePolicyProvider policyProvider,
             IDomiumCacheScopeProvider scopeProvider,
-            IDomiumCacheInvalidationMetadataProvider invalidationMetadataProvider)
+            IDomiumCacheInvalidationMetadataProvider invalidationMetadataProvider,
+            IDomiumCacheEntryOptionsFactory entryOptionsFactory)
         {
             _cacheStore = cacheStore ?? throw new ArgumentNullException(nameof(cacheStore));
             _cacheKeyProvider = cacheKeyProvider ?? throw new ArgumentNullException(nameof(cacheKeyProvider));
             _policyProvider = policyProvider ?? throw new ArgumentNullException(nameof(policyProvider));
             _scopeProvider = scopeProvider ?? throw new ArgumentNullException(nameof(scopeProvider));
             _invalidationMetadataProvider = invalidationMetadataProvider ?? throw new ArgumentNullException(nameof(invalidationMetadataProvider));
+            _entryOptionsFactory = entryOptionsFactory ?? throw new ArgumentNullException(nameof(entryOptionsFactory));
         }
 
         /// <summary>
@@ -79,19 +82,24 @@ namespace Domium.Application.Query.Pipelines.Behaviors
             }
 
             var result = await next().ConfigureAwait(false);
+
+            if (result is null && !policy.CacheNullValues)
+            {
+                return result!;
+            }
+
             var invalidationMetadata = _invalidationMetadataProvider.GetMetadata(query, policy);
+            var entryOptions = _entryOptionsFactory.Create(policy);
 
             await _cacheStore.SetAsync(
                 cacheKey,
                 result,
-                new DomiumCacheEntryOptions(
-                    policy.AbsoluteExpirationRelativeToNow,
-                    null),
+                entryOptions,
                 invalidationMetadata,
                 cancellationToken).ConfigureAwait(false);
 
 
-            return result;
+            return result!;
 
         }
     }

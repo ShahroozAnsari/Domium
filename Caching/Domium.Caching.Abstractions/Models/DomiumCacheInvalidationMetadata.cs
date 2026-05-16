@@ -22,9 +22,9 @@ namespace Domium.Caching.Abstractions.Models
         /// An optional logical group name.
         /// </param>
         public DomiumCacheInvalidationMetadata(
-            IEnumerable<string> tags,
-            IEnumerable<string> entityKeys,
-            string group)
+            IEnumerable<string>? tags,
+            IEnumerable<string>? entityKeys,
+            string? group)
         {
             Tags = Normalize(tags);
             EntityKeys = Normalize(entityKeys);
@@ -44,9 +44,9 @@ namespace Domium.Caching.Abstractions.Models
         /// <summary>
         /// Gets the logical group associated with the cache entry.
         /// </summary>
-        public string Group { get; }
+        public string? Group { get; }
 
-        private static IReadOnlyCollection<string> Normalize(IEnumerable<string> values)
+        private static IReadOnlyCollection<string> Normalize(IEnumerable<string>? values)
         {
             if (values == null)
             {

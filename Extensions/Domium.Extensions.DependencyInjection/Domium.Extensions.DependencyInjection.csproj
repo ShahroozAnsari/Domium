@@ -10,17 +10,19 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
     <PackageReference Include="Scrutor" Version="7.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.11.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
     <ProjectReference Include="..\..\Application\Domium.Application\Domium.Application.csproj" />
-    <ProjectReference Include="..\..\Chaching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
-    <ProjectReference Include="..\..\Chaching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
-    <ProjectReference Include="..\..\Chaching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
-    <ProjectReference Include="..\..\Chaching\Domium.Caching\Domium.Caching.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching\Domium.Caching.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Tenancy\Domium.Tenancy.Abstractions\Domium.Tenancy.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

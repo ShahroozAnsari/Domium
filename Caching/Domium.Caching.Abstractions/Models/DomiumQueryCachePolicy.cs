@@ -40,9 +40,9 @@ namespace Domium.Caching.Abstractions.Models
             DomiumQueryCacheScopeMode scopeMode,
             TimeSpan? absoluteExpirationRelativeToNow,
             TimeSpan? slidingExpiration,
-            string keyPrefix,
+            string? keyPrefix,
             bool cacheNullValues,
-            DomiumCacheInvalidationMetadata invalidationMetadata)
+            DomiumCacheInvalidationMetadata? invalidationMetadata)
         {
             if (queryType == null)
             {
@@ -106,7 +106,7 @@ namespace Domium.Caching.Abstractions.Models
         /// <summary>
         /// Gets the key prefix used during cache key generation.
         /// </summary>
-        public string KeyPrefix { get; }
+        public string? KeyPrefix { get; }
 
         /// <summary>
         /// Gets a value indicating whether null results should be cached.
@@ -116,6 +116,6 @@ namespace Domium.Caching.Abstractions.Models
         /// <summary>
         /// Gets the static invalidation metadata for the query type.
         /// </summary>
-        public DomiumCacheInvalidationMetadata InvalidationMetadata { get; }
+        public DomiumCacheInvalidationMetadata? InvalidationMetadata { get; }
     }
 }

@@ -18,11 +18,11 @@ namespace Domium.Caching.Redis.Internal
         /// <summary>
         /// Gets or sets the cached value.
         /// </summary>
-        public T Value { get; set; }
+        public T? Value { get; set; }
 
         /// <summary>
         /// Gets or sets the invalidation metadata.
         /// </summary>
-        public DomiumCacheInvalidationMetadata Metadata { get; set; }
+        public DomiumCacheInvalidationMetadata? Metadata { get; set; }
     }
 }

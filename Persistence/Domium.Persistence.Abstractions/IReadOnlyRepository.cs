@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Domium.Domain.Abstractions.Aggregate;
+using Domium.Persistence.Abstractions.Specifications;
 
 namespace Domium.Persistence.Abstractions;
 

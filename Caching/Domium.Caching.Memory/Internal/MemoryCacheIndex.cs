@@ -61,7 +61,7 @@ namespace Domium.Caching.Memory.Internal
         /// <param name="group">
         /// The group associated with the key.
         /// </param>
-        public void AddGroup(string key, string group)
+        public void AddGroup(string key, string? group)
         {
             if (string.IsNullOrWhiteSpace(group))
             {

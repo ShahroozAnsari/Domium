@@ -8,7 +8,7 @@
 /// </typeparam>
 public sealed class DomiumCacheResult<T>
 {
-    private DomiumCacheResult(bool hasValue, T value)
+    private DomiumCacheResult(bool hasValue, T? value)
     {
         HasValue = hasValue;
         Value = value;
@@ -22,7 +22,7 @@ public sealed class DomiumCacheResult<T>
     /// <summary>
     /// Gets the cached value when <see cref="HasValue"/> is <c>true</c>.
     /// </summary>
-    public T Value { get; }
+    public T? Value { get; }
 
     /// <summary>
     /// Creates a cache hit result.
@@ -33,7 +33,7 @@ public sealed class DomiumCacheResult<T>
     /// <returns>
     /// A cache hit result.
     /// </returns>
-    public static DomiumCacheResult<T> Hit(T value)
+    public static DomiumCacheResult<T> Hit(T? value)
     {
         return new DomiumCacheResult<T>(true, value);
     }
@@ -46,6 +46,6 @@ public sealed class DomiumCacheResult<T>
     /// </returns>
     public static DomiumCacheResult<T> Miss()
     {
-        return new DomiumCacheResult<T>(false, default(T));
+        return new DomiumCacheResult<T>(false, default);
     }
 }

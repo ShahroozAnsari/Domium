@@ -72,7 +72,7 @@ namespace Domium.Caching.Redis.Stores
                 return DomiumCacheResult<T>.Miss();
             }
 
-            var payload = (string)redisValue;
+            var payload = redisValue.ToString();
 
             if (string.IsNullOrWhiteSpace(payload))
             {
@@ -280,7 +280,7 @@ namespace Domium.Caching.Redis.Stores
             if (members.Length > 0)
             {
                 var redisKeys = members
-                    .Select(x => (RedisKey)(string)x)
+                    .Select(x => (RedisKey)x.ToString())
                     .ToArray();
 
                 await _database.KeyDeleteAsync(redisKeys).ConfigureAwait(false);
