@@ -19,6 +19,7 @@
   </Folder>
   <Folder Name="/Framework/Persistence/">
     <Project Path="Persistence/Domium.Persistence.Abstractions/Domium.Persistence.Abstractions.csproj" Id="3c70d12c-9f34-444c-aa6c-a4d4c97f3bd3" />
+    <Project Path="Persistence/Domium.Persistence.EntityFrameworkCore/Domium.Persistence.EntityFrameworkCore.csproj" />
   </Folder>
   <Folder Name="/Framework/Tenancy/">
     <Project Path="Tenancy/Domium.Tenancy.Abstractions/Domium.Tenancy.Abstractions.csproj" Id="f631e562-b419-4b43-96f0-c1be451a6517" />

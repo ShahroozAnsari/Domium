@@ -16,7 +16,7 @@ using Domium.Caching.Providers;
 using Domium.Caching.Redis.Stores;
 using Domium.Extensions.DependencyInjection.Internal;
 using Domium.Domain.Abstractions.Events;
-using Domium.Tenancy.Abstractions;
+using Domium.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyModel;
@@ -40,6 +40,7 @@ internal static class DomiumRegistrar
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
         services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
+        services.AddDomiumTenancy();
     }
 
     private static void RegisterApplicationTypes(IServiceCollection services)
@@ -151,7 +152,6 @@ internal static class DomiumRegistrar
         services.TryAddSingleton<IDomiumCacheInvalidationMetadataProvider, DefaultDomiumCacheInvalidationMetadataProvider>();
         services.TryAddSingleton<IDomiumCacheEntryOptionsFactory>(
             _ => new DefaultDomiumCacheEntryOptionsFactory(options.DefaultExpiration));
-        services.TryAddScoped<IDomiumTenantAccessor, DefaultDomiumTenantAccessor>();
 
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped(

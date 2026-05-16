@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\Caching\Domium.Caching\Domium.Caching.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Tenancy\Domium.Tenancy\Domium.Tenancy.csproj" />
     <ProjectReference Include="..\..\Tenancy\Domium.Tenancy.Abstractions\Domium.Tenancy.Abstractions.csproj" />
   </ItemGroup>
 
