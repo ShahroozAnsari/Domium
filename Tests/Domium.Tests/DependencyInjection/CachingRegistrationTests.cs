@@ -93,14 +93,25 @@ public sealed class CachingRegistrationTests
             () => queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery()));
     }
 
+    [Fact]
+    public void Redis_caching_requires_explicit_redis_store_registration()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => services.AddDomium(options =>
+                options.UseCaching(cacheOptions => cacheOptions.Provider = DomiumCacheProvider.Redis)));
+
+        Assert.Contains("AddDomiumRedisCacheStore", exception.Message);
+    }
+
     private static void RegisterPolicy(
         IServiceProvider provider,
         DomiumQueryCacheScopeMode scopeMode,
         TimeSpan? absoluteExpirationRelativeToNow = null,
         TimeSpan? slidingExpiration = null)
     {
-        var policyProvider = Assert.IsType<DomiumQueryCachePolicyProvider>(
-            provider.GetRequiredService<IDomiumQueryCachePolicyProvider>());
+        var policyProvider = provider.GetRequiredService<IDomiumQueryCachePolicyRegistry>();
 
         policyProvider.Register(
             new DomiumQueryCachePolicy(

@@ -8,7 +8,9 @@ namespace Domium.Caching.Providers;
 /// <summary>
 /// Represents an in-memory registry of query cache policies.
 /// </summary>
-public sealed class DomiumQueryCachePolicyProvider : IDomiumQueryCachePolicyProvider
+public sealed class DomiumQueryCachePolicyProvider :
+    IDomiumQueryCachePolicyProvider,
+    IDomiumQueryCachePolicyRegistry
 {
     private readonly ConcurrentDictionary<Type, DomiumQueryCachePolicy> _policies;
 

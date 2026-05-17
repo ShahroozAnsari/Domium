@@ -8,8 +8,9 @@ Domium is a lightweight DDD/CQRS foundation for .NET applications. It provides d
 - `Domain/Domium.Domain`: concrete base types such as `EntityBase<TId>`, `AggregateRoot<TId>`, `ValueObject`, `AggregateId<T>`, and `DomainEvent`.
 - `Application/Domium.Application.Abstractions`: command/query buses, handlers, validators, and pipeline contracts.
 - `Application/Domium.Application`: command/query bus implementations, pipeline behaviors, and domain event dispatching.
-- `Persistence/Domium.Persistence.Abstractions`: repository, unit-of-work, and specification contracts.
+- `Persistence/Domium.Persistence.Abstractions`: aggregate repository and unit-of-work contracts.
 - `Persistence/Domium.Persistence.EntityFrameworkCore`: EF Core repository, unit-of-work, specification evaluator, and DbContext base.
+- `Persistence/Domium.Persistence.Dapper`: Dapper connection/session, unit-of-work, SQL executor, and optional mapped aggregate repository.
 - `Caching/*`: cache policy abstractions and memory/Redis cache stores.
 - `Eventing/Domium.Eventing.Abstractions`: provider-neutral internal/external event contracts.
 - `Eventing/Domium.Eventing`: in-process internal event publishing and default external event no-op publisher.
@@ -26,7 +27,6 @@ services.AddDomium(options =>
     options
         .UseValidation()
         .UseLogging()
-        .UseTransactions()
         .UseCaching(cache =>
         {
             cache.Provider = DomiumCacheProvider.Memory;
@@ -38,8 +38,66 @@ services.AddDomium(options =>
 For EF Core persistence:
 
 ```csharp
-services.AddDbContext<AppDbContext>(options => /* configure provider */);
-services.AddDomiumEntityFrameworkCore<AppDbContext>();
+services.AddDomiumEntityFrameworkCore<AppDbContext>(options =>
+{
+    options.UseSqlServer(connectionString);
+});
+
+services.AddDomium(options => options.UseTransactions());
+```
+
+For Dapper persistence:
+
+```csharp
+services.AddDomiumDapper(options =>
+{
+    options.UseConnectionFactory<SqlConnectionFactory>();
+});
+
+services.AddDomium(options => options.UseTransactions());
+```
+
+Dapper can be used for explicit SQL:
+
+```csharp
+var orders = await sql.QueryAsync<OrderReadModel>(
+    "select Id, Number from Orders where TenantId = @TenantId",
+    new { TenantId = tenantId },
+    cancellationToken);
+```
+
+Or it can be selected as the aggregate repository provider when the application supplies aggregate mappings:
+
+```csharp
+services.AddScoped<IDapperAggregateMapper<Order, OrderId>, OrderMapper>();
+
+services.AddDomiumDapper(options =>
+{
+    options
+        .UseConnectionFactory<SqlConnectionFactory>()
+        .UseAggregateRepositories();
+});
+```
+
+EF-specific specification queries are available through `IEfRepository<TAggregate, TId>`. The core `IRepository<TAggregate, TId>` intentionally only represents aggregate load/save behavior.
+
+For Redis-backed query caching:
+
+```csharp
+services.AddDomiumRedisCacheStore("localhost");
+services.AddDomium(options =>
+{
+    options.UseCaching(cache => cache.Provider = DomiumCacheProvider.Redis);
+});
+```
+
+When handlers live outside the assembly that calls `AddDomium`, register those assemblies explicitly:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.AddApplicationAssembly(typeof(CreateOrderHandler).Assembly);
+});
 ```
 
 For ambient tenant scopes:

@@ -1,8 +1,9 @@
 using Domium.Domain;
+using Domium.Domain.Abstractions.Aggregate;
 using Domium.Domain.Abstractions.Events;
 using Domium.Persistence.Abstractions;
-using Domium.Persistence.Abstractions.Specifications;
 using Domium.Persistence.EntityFrameworkCore;
+using Domium.Persistence.EntityFrameworkCore.Specifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,10 +31,33 @@ public sealed class EntityFrameworkCoreRepositoryTests
     }
 
     [Fact]
+    public async Task EntityFrameworkCore_registration_can_configure_dbcontext()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IDomainEventDispatcher, CapturingDispatcher>();
+        services.AddDomiumEntityFrameworkCore<TestDbContext>(options =>
+            options
+                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+                .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+
+        await using var provider = services.BuildServiceProvider();
+        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
+        var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
+        var id = new CustomerId(Guid.NewGuid());
+
+        await unitOfWork.BeginAsync();
+        await repository.AddAsync(new Customer(id, "Ada", true));
+        await unitOfWork.CommitAsync();
+
+        Assert.NotNull(await repository.GetByIdAsync(id));
+    }
+
+    [Fact]
     public async Task Repository_applies_specifications()
     {
         await using var provider = CreateProvider();
-        var repository = provider.GetRequiredService<IRepository<Customer, CustomerId>>();
+        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
 
         await unitOfWork.BeginAsync();
@@ -56,7 +80,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
     {
         CapturingDispatcher.Reset();
         await using var provider = CreateProvider();
-        var repository = provider.GetRequiredService<IRepository<Customer, CustomerId>>();
+        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
         var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
 
@@ -70,11 +94,56 @@ public sealed class EntityFrameworkCoreRepositoryTests
         Assert.Empty(customer.DomainEvents);
     }
 
+    [Fact]
+    public async Task DbContext_keeps_domain_events_when_dispatch_fails()
+    {
+        await using var provider = CreateProvider<FailingDispatcher>();
+        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
+        var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
+        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
+
+        customer.Activate();
+
+        await unitOfWork.BeginAsync();
+        await repository.AddAsync(customer);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => unitOfWork.CommitAsync());
+
+        Assert.NotEmpty(customer.DomainEvents);
+    }
+
+    [Fact]
+    public async Task DbContext_applies_audit_and_soft_delete_metadata()
+    {
+        await using var provider = CreateProvider();
+        var dbContext = provider.GetRequiredService<TestDbContext>();
+        var customer = new SoftDeletedCustomer(new CustomerId(Guid.NewGuid()), "Ada");
+
+        dbContext.SoftDeletedCustomers.Add(customer);
+        await dbContext.SaveChangesAsync();
+
+        Assert.NotEqual(default, customer.CreatedAt);
+
+        dbContext.SoftDeletedCustomers.Remove(customer);
+        await dbContext.SaveChangesAsync();
+
+        Assert.True(customer.IsDeleted);
+        Assert.NotNull(customer.DeletedAt);
+        Assert.NotNull(customer.ModifiedAt);
+        Assert.Equal(EntityState.Unchanged, dbContext.Entry(customer).State);
+    }
+
     private static ServiceProvider CreateProvider()
+    {
+        return CreateProvider<CapturingDispatcher>();
+    }
+
+    private static ServiceProvider CreateProvider<TDispatcher>()
+        where TDispatcher : class, IDomainEventDispatcher
     {
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomainEventDispatcher, CapturingDispatcher>();
+        services.AddSingleton<IDomainEventDispatcher, TDispatcher>();
         services.AddDbContext<TestDbContext>(options =>
             options
                 .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -91,9 +160,22 @@ public sealed class EntityFrameworkCoreRepositoryTests
     {
         public DbSet<Customer> Customers => Set<Customer>();
 
+        public DbSet<SoftDeletedCustomer> SoftDeletedCustomers => Set<SoftDeletedCustomer>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Customer>(builder =>
+            {
+                builder.HasKey(customer => customer.Id);
+                builder.Property(customer => customer.Id)
+                    .HasConversion(
+                        id => id.Value,
+                        value => new CustomerId(value));
+                builder.Property(customer => customer.Name).IsRequired();
+                builder.Ignore(customer => customer.DomainEvents);
+            });
+
+            modelBuilder.Entity<SoftDeletedCustomer>(builder =>
             {
                 builder.HasKey(customer => customer.Id);
                 builder.Property(customer => customer.Id)
@@ -139,6 +221,32 @@ public sealed class EntityFrameworkCoreRepositoryTests
         public CustomerId CustomerId { get; } = customerId;
     }
 
+    private sealed class SoftDeletedCustomer : SoftDeletableEntityBase<CustomerId>, IAggregateRoot<CustomerId>
+    {
+        private readonly List<IDomainEvent> _domainEvents = new List<IDomainEvent>();
+
+        private SoftDeletedCustomer()
+            : base(new CustomerId(Guid.Empty))
+        {
+            Name = string.Empty;
+        }
+
+        public SoftDeletedCustomer(CustomerId id, string name)
+            : base(id)
+        {
+            Name = name;
+        }
+
+        public string Name { get; private set; }
+
+        public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+
+        public void ClearDomainEvents()
+        {
+            _domainEvents.Clear();
+        }
+    }
+
     private sealed class ActiveCustomersSpecification : Specification<Customer>
     {
         public ActiveCustomersSpecification()
@@ -165,6 +273,16 @@ public sealed class EntityFrameworkCoreRepositoryTests
         {
             CapturedEvents.AddRange(domainEvents);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FailingDispatcher : IDomainEventDispatcher
+    {
+        public Task DispatchAsync(
+            IReadOnlyCollection<IDomainEvent> domainEvents,
+            CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("Dispatch failed.");
         }
     }
 }

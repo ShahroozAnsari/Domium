@@ -1,4 +1,3 @@
-using Domium.Persistence.Abstractions.Specifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace Domium.Persistence.EntityFrameworkCore.Specifications;

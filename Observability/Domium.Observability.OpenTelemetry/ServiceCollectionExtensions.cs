@@ -140,10 +140,14 @@ public static class ServiceCollectionExtensions
             exporter.Headers = options.Headers;
         }
 
-        if (Enum.TryParse<OtlpExportProtocol>(options.Protocol, ignoreCase: true, out var protocol))
+        if (!Enum.TryParse<OtlpExportProtocol>(options.Protocol, ignoreCase: true, out var protocol))
         {
-            exporter.Protocol = protocol;
+            throw new ArgumentException(
+                $"Invalid OpenTelemetry OTLP protocol '{options.Protocol}'.",
+                nameof(options));
         }
+
+        exporter.Protocol = protocol;
     }
 
     private static void ValidateOptions(DomiumOpenTelemetryOptions options)

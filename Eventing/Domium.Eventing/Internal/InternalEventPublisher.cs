@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Domium.Eventing.Abstractions.Internal;
 using Domium.Observability;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,7 +44,16 @@ public sealed class InternalEventPublisher(IServiceProvider serviceProvider) : I
                 continue;
             }
 
-            var task = (Task?)handleMethod.Invoke(handler, new object[] { internalEvent, cancellationToken });
+            Task? task;
+
+            try
+            {
+                task = (Task?)handleMethod.Invoke(handler, new object[] { internalEvent, cancellationToken });
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is not null)
+            {
+                throw exception.InnerException;
+            }
 
             if (task is not null)
             {

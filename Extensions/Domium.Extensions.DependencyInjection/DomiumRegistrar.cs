@@ -13,18 +13,15 @@ using Domium.Caching.Abstractions.Providers;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
-using Domium.Caching.Redis.Stores;
-using Domium.Extensions.DependencyInjection.Internal;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
+using Domium.Persistence.Abstractions;
 using Domium.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.DependencyModel;
 using Scrutor;
-using StackExchange.Redis;
 
 namespace Domium.Extensions.DependencyInjection;
 
@@ -33,7 +30,7 @@ internal static class DomiumRegistrar
     public static void Register(IDomiumBuilder builder)
     {
         RegisterCore(builder.Services);
-        RegisterApplicationTypes(builder.Services);
+        RegisterApplicationTypes(builder.Services, builder.Options);
         RegisterOptionalBehaviors(builder.Services, builder.Options);
         ValidateHandlers(builder.Services);
     }
@@ -47,55 +44,60 @@ internal static class DomiumRegistrar
         services.AddDomiumTenancy();
     }
 
-    private static void RegisterApplicationTypes(IServiceCollection services)
+    private static void RegisterApplicationTypes(IServiceCollection services, DomiumOptions options)
     {
-        var dependencyContext = DependencyContext.Default;
+        var assemblies = options.ApplicationAssemblies
+            .Where(assembly => assembly is { IsDynamic: false })
+            .Distinct()
+            .ToArray();
 
-        if (dependencyContext != null)
+        if (assemblies.Length == 0)
         {
-            services.Scan(scan => scan
-                .FromDependencyContext(dependencyContext, AssemblyFilter.IsCandidateAssembly)
-
-                .AddClasses(c => c.AssignableTo(typeof(ICommandHandler<>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(IQueryHandler<,>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(ICommandValidator<>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(IQueryValidator<,>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(IDomainEventHandler<>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(IInternalEventHandler<>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(IExternalEventHandler<>)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
-
-                .AddClasses(c => c.AssignableTo(typeof(IDomiumQueryCachePolicyProvider)))
-                .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-                .AsImplementedInterfaces()
-                .WithSingletonLifetime());
+            return;
         }
+
+        services.Scan(scan => scan
+            .FromAssemblies(assemblies)
+
+            .AddClasses(c => c.AssignableTo(typeof(ICommandHandler<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IQueryHandler<,>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(ICommandValidator<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IQueryValidator<,>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IDomainEventHandler<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IInternalEventHandler<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IExternalEventHandler<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IDomiumQueryCachePolicyProvider)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithSingletonLifetime());
     }
 
     private static void RegisterOptionalBehaviors(IServiceCollection services, DomiumOptions options)
@@ -128,6 +130,8 @@ internal static class DomiumRegistrar
 
         if (options.TransactionsEnabled)
         {
+            ValidateTransactionRegistration(services);
+
             services.TryAddEnumerable(
                 ServiceDescriptor.Scoped(
                     typeof(ICommandPipelineBehavior<>),
@@ -152,16 +156,14 @@ internal static class DomiumRegistrar
 
             services.TryAddSingleton<IDomiumCacheStore, MemoryDomiumCacheStore>();
         }
-        else if (options.Provider == DomiumCacheProvider.Redis)
-        {
-            services.TryAddSingleton<IConnectionMultiplexer>(
-                _ => ConnectionMultiplexer.Connect(options.RedisConnectionString));
-
-            services.TryAddSingleton<IDomiumCacheStore, RedisDomiumCacheStore>();
-        }
+        ValidateCacheStoreRegistration(services, options);
 
         services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
-        services.TryAddSingleton<IDomiumQueryCachePolicyProvider, DomiumQueryCachePolicyProvider>();
+        services.TryAddSingleton<DomiumQueryCachePolicyProvider>();
+        services.TryAddSingleton<IDomiumQueryCachePolicyProvider>(
+            provider => provider.GetRequiredService<DomiumQueryCachePolicyProvider>());
+        services.TryAddSingleton<IDomiumQueryCachePolicyRegistry>(
+            provider => provider.GetRequiredService<DomiumQueryCachePolicyProvider>());
         services.TryAddScoped<IDomiumCacheScopeProvider, DefaultDomiumCacheScopeProvider>();
         services.TryAddSingleton<IDomiumCacheInvalidationMetadataProvider, DefaultDomiumCacheInvalidationMetadataProvider>();
         services.TryAddSingleton<IDomiumCacheEntryOptionsFactory>(
@@ -189,6 +191,35 @@ internal static class DomiumRegistrar
         {
             throw new InvalidOperationException(
                 "Redis caching requires a non-empty Redis connection string.");
+        }
+    }
+
+    private static void ValidateTransactionRegistration(IServiceCollection services)
+    {
+        var hasUnitOfWork = services.Any(service => service.ServiceType == typeof(IUnitOfWork));
+
+        if (!hasUnitOfWork)
+        {
+            throw new InvalidOperationException(
+                "Transactions require an IUnitOfWork registration. Register a persistence provider before calling AddDomium with UseTransactions.");
+        }
+    }
+
+    private static void ValidateCacheStoreRegistration(
+        IServiceCollection services,
+        DomiumCachingOptions options)
+    {
+        if (options.Provider != DomiumCacheProvider.Redis)
+        {
+            return;
+        }
+
+        var hasCacheStore = services.Any(service => service.ServiceType == typeof(IDomiumCacheStore));
+
+        if (!hasCacheStore)
+        {
+            throw new InvalidOperationException(
+                "Redis caching requires an IDomiumCacheStore registration. Call AddDomiumRedisCacheStore before AddDomium.");
         }
     }
 

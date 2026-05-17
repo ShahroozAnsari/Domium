@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -86,6 +87,37 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
             return DomiumCacheResult<T>.Miss();
         }
 
+        var now = DateTimeOffset.UtcNow;
+
+        if (envelope.AbsoluteExpiresAtUtc.HasValue && envelope.AbsoluteExpiresAtUtc.Value <= now)
+        {
+            await RemoveAsync(key, cancellationToken).ConfigureAwait(false);
+            return DomiumCacheResult<T>.Miss();
+        }
+
+        if (envelope.SlidingExpiration.HasValue)
+        {
+            var ttl = envelope.SlidingExpiration.Value;
+
+            if (envelope.AbsoluteExpiresAtUtc.HasValue)
+            {
+                var remainingAbsoluteTtl = envelope.AbsoluteExpiresAtUtc.Value - now;
+
+                if (remainingAbsoluteTtl <= TimeSpan.Zero)
+                {
+                    await RemoveAsync(key, cancellationToken).ConfigureAwait(false);
+                    return DomiumCacheResult<T>.Miss();
+                }
+
+                if (remainingAbsoluteTtl < ttl)
+                {
+                    ttl = remainingAbsoluteTtl;
+                }
+            }
+
+            await _database.KeyExpireAsync(key, ttl).ConfigureAwait(false);
+        }
+
         return DomiumCacheResult<T>.Hit(envelope.Value);
     }
 
@@ -126,23 +158,27 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
 
         var metadata = invalidationMetadata ?? new DomiumCacheInvalidationMetadata(null, null, null);
 
+        var now = DateTimeOffset.UtcNow;
+        var absoluteExpiresAtUtc = options?.AbsoluteExpirationRelativeToNow.HasValue == true
+            ? now.Add(options.AbsoluteExpirationRelativeToNow.Value)
+            : (DateTimeOffset?)null;
+
         var envelope = new RedisDomiumCacheEnvelope<T>
         {
             HasValue = true,
             Value = value,
-            Metadata = metadata
+            Metadata = metadata,
+            AbsoluteExpiresAtUtc = absoluteExpiresAtUtc,
+            SlidingExpiration = options?.SlidingExpiration
         };
 
         var payload = JsonSerializer.Serialize(envelope, SerializerOptions);
-        var ttl = options?.AbsoluteExpirationRelativeToNow;
+        var ttl = GetInitialTtl(options);
 
         await _database.StringSetAsync(
             key,
             payload,
-            expiry: ttl.HasValue ? (Expiration)ttl.Value : default
-        );
-
-
+            expiry: ttl.HasValue ? (Expiration)ttl.Value : default).ConfigureAwait(false);
 
         await AddIndexesAsync(key, metadata).ConfigureAwait(false);
     }
@@ -167,7 +203,13 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
             return;
         }
 
+        var metadata = await GetMetadataAsync(key).ConfigureAwait(false);
         await _database.KeyDeleteAsync(key).ConfigureAwait(false);
+
+        if (metadata is not null)
+        {
+            await RemoveIndexesAsync(key, metadata).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -279,13 +321,105 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
 
         if (members.Length > 0)
         {
+            var entries = new List<(string Key, DomiumCacheInvalidationMetadata? Metadata)>(members.Length);
+
+            foreach (var member in members)
+            {
+                var key = member.ToString();
+                entries.Add((key, await GetMetadataAsync(key).ConfigureAwait(false)));
+            }
+
             var redisKeys = members
                 .Select(x => (RedisKey)x.ToString())
                 .ToArray();
 
             await _database.KeyDeleteAsync(redisKeys).ConfigureAwait(false);
+
+            foreach (var entry in entries)
+            {
+                if (entry.Metadata is not null)
+                {
+                    await RemoveIndexesAsync(entry.Key, entry.Metadata).ConfigureAwait(false);
+                }
+            }
         }
 
         await _database.KeyDeleteAsync(indexKey).ConfigureAwait(false);
+    }
+
+    private static TimeSpan? GetInitialTtl(DomiumCacheEntryOptions? options)
+    {
+        if (options is null)
+        {
+            return null;
+        }
+
+        if (options.AbsoluteExpirationRelativeToNow.HasValue &&
+            options.SlidingExpiration.HasValue)
+        {
+            return options.AbsoluteExpirationRelativeToNow.Value <= options.SlidingExpiration.Value
+                ? options.AbsoluteExpirationRelativeToNow.Value
+                : options.SlidingExpiration.Value;
+        }
+
+        return options.AbsoluteExpirationRelativeToNow ?? options.SlidingExpiration;
+    }
+
+    private async Task<DomiumCacheInvalidationMetadata?> GetMetadataAsync(string key)
+    {
+        var redisValue = await _database.StringGetAsync(key).ConfigureAwait(false);
+
+        if (!redisValue.HasValue)
+        {
+            return null;
+        }
+
+        var payload = redisValue.ToString();
+
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        var envelope = JsonSerializer.Deserialize<RedisDomiumCacheMetadataEnvelope>(
+            payload,
+            SerializerOptions);
+
+        return envelope?.Metadata;
+    }
+
+    private async Task RemoveIndexesAsync(
+        string key,
+        DomiumCacheInvalidationMetadata metadata)
+    {
+        foreach (var tag in metadata.Tags.Where(x => !string.IsNullOrWhiteSpace(x)))
+        {
+            await RemoveIndexMemberAsync(RedisInvalidationIndexKeys.Tag(tag.Trim()), key).ConfigureAwait(false);
+        }
+
+        foreach (var entityKey in metadata.EntityKeys.Where(x => !string.IsNullOrWhiteSpace(x)))
+        {
+            await RemoveIndexMemberAsync(RedisInvalidationIndexKeys.EntityKey(entityKey.Trim()), key).ConfigureAwait(false);
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata.Group))
+        {
+            await RemoveIndexMemberAsync(RedisInvalidationIndexKeys.Group(metadata.Group.Trim()), key).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RemoveIndexMemberAsync(string indexKey, string key)
+    {
+        await _database.SetRemoveAsync(indexKey, key).ConfigureAwait(false);
+
+        if (await _database.SetLengthAsync(indexKey).ConfigureAwait(false) == 0)
+        {
+            await _database.KeyDeleteAsync(indexKey).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class RedisDomiumCacheMetadataEnvelope
+    {
+        public DomiumCacheInvalidationMetadata? Metadata { get; set; }
     }
 }

@@ -1,6 +1,7 @@
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing.Abstractions.Internal;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
 namespace Domium.Application.Events;
 
@@ -46,7 +47,16 @@ public sealed class DomainEventDispatcher(IServiceProvider serviceProvider) : ID
                 continue;
             }
 
-            var task = (Task?)handleMethod.Invoke(handler, new object[] { domainEvent, cancellationToken });
+            Task? task;
+
+            try
+            {
+                task = (Task?)handleMethod.Invoke(handler, new object[] { domainEvent, cancellationToken });
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is not null)
+            {
+                throw exception.InnerException;
+            }
 
             if (task is not null)
             {

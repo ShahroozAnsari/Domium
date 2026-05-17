@@ -1,22 +1,16 @@
-﻿// IReadOnlyRepository.cs
-
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Domium.Domain.Abstractions.Aggregate;
-using Domium.Persistence.Abstractions.Specifications;
+using Domium.Persistence.Abstractions;
+using Domium.Persistence.EntityFrameworkCore.Specifications;
 
-namespace Domium.Persistence.Abstractions;
+namespace Domium.Persistence.EntityFrameworkCore;
 
 /// <summary>
-/// Represents a read-only repository for querying aggregate roots.
+/// EF-specific aggregate repository with queryable specification support.
 /// </summary>
-public interface IReadOnlyRepository<TAggregate, TId>
+public interface IEfRepository<TAggregate, TId> : IRepository<TAggregate, TId>
     where TAggregate : class, IAggregateRoot<TId>
     where TId : IAggregateId
 {
-    Task<TAggregate?> GetByIdAsync(TId id, CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<TAggregate>> FindAsync(
         ISpecification<TAggregate> specification,
         CancellationToken cancellationToken = default);

@@ -1,4 +1,4 @@
-using Domium.Persistence.Abstractions.Specifications;
+using Domium.Persistence.EntityFrameworkCore.Specifications;
 
 namespace Domium.Tests.Persistence;
 

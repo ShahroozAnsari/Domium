@@ -1,6 +1,5 @@
 using Domium.Domain.Abstractions.Aggregate;
 using Domium.Persistence.Abstractions;
-using Domium.Persistence.Abstractions.Specifications;
 using Domium.Persistence.EntityFrameworkCore.Specifications;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,7 +8,7 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// <summary>
 /// EF Core repository implementation for aggregate roots.
 /// </summary>
-public class EfRepository<TAggregate, TId> : IRepository<TAggregate, TId>
+public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
     where TAggregate : class, IAggregateRoot<TId>
     where TId : IAggregateId
 {

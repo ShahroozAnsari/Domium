@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 
-namespace Domium.Persistence.Abstractions.Specifications;
+namespace Domium.Persistence.EntityFrameworkCore.Specifications;
 
 /// <summary>
-/// Base implementation for query specifications.
+/// Base implementation for EF Core query specifications.
 /// </summary>
-/// <typeparam name="T">The aggregate or entity type being queried.</typeparam>
 public abstract class Specification<T> : ISpecification<T>
 {
     private readonly List<Expression<Func<T, object>>> _includes = new();

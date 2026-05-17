@@ -1,4 +1,5 @@
-﻿using Domium.Caching.Abstractions.Models;
+using System;
+using Domium.Caching.Abstractions.Models;
 
 namespace Domium.Caching.Redis.Internal;
 
@@ -24,4 +25,14 @@ internal sealed class RedisDomiumCacheEnvelope<T>
     /// Gets or sets the invalidation metadata.
     /// </summary>
     public DomiumCacheInvalidationMetadata? Metadata { get; set; }
+
+    /// <summary>
+    /// Gets or sets the absolute UTC expiration timestamp.
+    /// </summary>
+    public DateTimeOffset? AbsoluteExpiresAtUtc { get; set; }
+
+    /// <summary>
+    /// Gets or sets the sliding expiration interval.
+    /// </summary>
+    public TimeSpan? SlidingExpiration { get; set; }
 }

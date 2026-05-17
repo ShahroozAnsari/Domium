@@ -113,6 +113,14 @@ public sealed class MemoryDomiumCacheStore : IDomiumCacheStore
             }
         }
 
+        entryOptions.RegisterPostEvictionCallback((evictedKey, _, _, state) =>
+        {
+            if (evictedKey is string cacheKey && state is MemoryCacheIndex index)
+            {
+                index.RemoveKey(cacheKey);
+            }
+        }, _index);
+
         var metadata = invalidationMetadata ?? new DomiumCacheInvalidationMetadata(null, null, null);
         var envelope = new MemoryDomiumCacheEnvelope<T>(true, value, metadata);
 
