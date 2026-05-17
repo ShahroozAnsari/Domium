@@ -10,7 +10,7 @@ public abstract class AggregateId<T> : ValueObject, IAggregateId<T>
 {
     protected AggregateId(T value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        if (value == null) throw new ArgumentNullException(nameof(value));
         Value = value;
     }
 

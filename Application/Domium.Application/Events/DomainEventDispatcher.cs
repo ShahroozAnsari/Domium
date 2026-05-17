@@ -14,7 +14,7 @@ public sealed class DomainEventDispatcher(IServiceProvider serviceProvider) : ID
         IReadOnlyCollection<IDomainEvent> domainEvents,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(domainEvents);
+        if (domainEvents == null) throw new ArgumentNullException(nameof(domainEvents));
 
         var internalEventPublisher = serviceProvider.GetService<IInternalEventPublisher>();
 
@@ -33,7 +33,7 @@ public sealed class DomainEventDispatcher(IServiceProvider serviceProvider) : ID
 
     private async Task DispatchSingleAsync(IDomainEvent domainEvent, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(domainEvent);
+        if (domainEvent == null) throw new ArgumentNullException(nameof(domainEvent));
 
         var handlerType = typeof(IDomainEventHandler<>).MakeGenericType(domainEvent.GetType());
         var handlers = serviceProvider.GetServices(handlerType);

@@ -12,7 +12,7 @@ public static class DomiumServiceCollectionExtensions
         this IServiceCollection services,
         Action<DomiumOptions>? configure = null)
     {
-        ArgumentNullException.ThrowIfNull(services);
+        if (services == null) throw new ArgumentNullException(nameof(services));
 
         var options = new DomiumOptions();
         options.AddApplicationAssembly(Assembly.GetCallingAssembly());

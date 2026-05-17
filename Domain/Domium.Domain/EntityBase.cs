@@ -19,11 +19,11 @@ public abstract class EntityBase<TId> : EntityBase, IEntityBase<TId>
 {
     protected EntityBase(TId id)
     {
-        ArgumentNullException.ThrowIfNull(id);
+        if (id == null) throw new ArgumentNullException(nameof(id));
         Id = id;
     }
 
-    public TId Id { get; protected init; }
+    public TId Id { get; protected set; }
 
     public override bool Equals(object? obj)
     {

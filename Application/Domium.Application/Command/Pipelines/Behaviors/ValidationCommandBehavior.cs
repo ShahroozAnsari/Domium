@@ -1,4 +1,4 @@
-﻿using Domium.Application.Abstractions.Command;
+using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Application.Abstractions.Command.Validation;
 
@@ -13,8 +13,8 @@ public sealed class ValidationCommandBehavior<TCommand>(IEnumerable<ICommandVali
         CancellationToken cancellationToken,
         CommandHandlerDelegate next)
     {
-        ArgumentNullException.ThrowIfNull(command);
-        ArgumentNullException.ThrowIfNull(next);
+        if (command == null) throw new ArgumentNullException(nameof(command));
+        if (next == null) throw new ArgumentNullException(nameof(next));
 
         foreach (var validator in validators)
         {

@@ -20,7 +20,7 @@ public abstract class AggregateRoot<TId>(TId id) : EntityBase<TId>(id), IAggrega
 
     protected void RaiseDomainEvent(IDomainEvent domainEvent)
     {
-        ArgumentNullException.ThrowIfNull(domainEvent);
+        if (domainEvent == null) throw new ArgumentNullException(nameof(domainEvent));
         _domainEvents.Add(domainEvent);
     }
 }

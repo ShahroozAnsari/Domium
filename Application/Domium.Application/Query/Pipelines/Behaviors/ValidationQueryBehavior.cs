@@ -1,4 +1,4 @@
-﻿using Domium.Application.Abstractions.Query;
+using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
 using Domium.Application.Abstractions.Query.Validation;
 
@@ -13,8 +13,8 @@ public sealed class ValidationQueryBehavior<TQuery, TResult>(IEnumerable<IQueryV
         CancellationToken cancellationToken,
         QueryHandlerDelegate<TResult> next)
     {
-        ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(next);
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (next == null) throw new ArgumentNullException(nameof(next));
 
         foreach (var validator in validators)
         {

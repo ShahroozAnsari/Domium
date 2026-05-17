@@ -1,4 +1,4 @@
-﻿using Domium.Application.Abstractions.Command;
+using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Application.Abstractions.Command.Validation;
 using Domium.Application.Abstractions.Query;
@@ -177,7 +177,7 @@ internal static class DomiumRegistrar
 
     private static void ValidateCachingOptions(DomiumCachingOptions options)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        if (options == null) throw new ArgumentNullException(nameof(options));
 
         if (options.DefaultExpiration <= TimeSpan.Zero)
         {

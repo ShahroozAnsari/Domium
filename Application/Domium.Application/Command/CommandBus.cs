@@ -11,7 +11,7 @@ public sealed class CommandBus(IServiceProvider serviceProvider) : ICommandBus
     public async Task ExecuteAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
         where TCommand : ICommand
     {
-        ArgumentNullException.ThrowIfNull(command);
+        if (command == null) throw new ArgumentNullException(nameof(command));
 
         var commandName = typeof(TCommand).FullName ?? typeof(TCommand).Name;
         var stopwatch = Stopwatch.StartNew();

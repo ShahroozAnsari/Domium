@@ -1,4 +1,4 @@
-﻿using Domium.Application.Abstractions.Command;
+using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Microsoft.Extensions.Logging;
 
@@ -15,8 +15,8 @@ public sealed class LoggingCommandBehavior<TCommand>(ILogger<LoggingCommandBehav
         CancellationToken cancellationToken,
         CommandHandlerDelegate next)
     {
-        ArgumentNullException.ThrowIfNull(command);
-        ArgumentNullException.ThrowIfNull(next);
+        if (command == null) throw new ArgumentNullException(nameof(command));
+        if (next == null) throw new ArgumentNullException(nameof(next));
 
         var commandName = typeof(TCommand).Name;
 

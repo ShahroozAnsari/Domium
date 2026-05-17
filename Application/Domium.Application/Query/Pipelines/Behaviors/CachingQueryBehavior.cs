@@ -1,4 +1,4 @@
-﻿
+
 using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
 using Domium.Caching.Abstractions.Providers;
@@ -60,8 +60,8 @@ public sealed class CachingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavi
         CancellationToken cancellationToken,
         QueryHandlerDelegate<TResult> next)
     {
-        ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(next);
+        if (query == null) throw new ArgumentNullException(nameof(query));
+        if (next == null) throw new ArgumentNullException(nameof(next));
 
         var policy = _policyProvider.GetPolicy(typeof(TQuery));
 

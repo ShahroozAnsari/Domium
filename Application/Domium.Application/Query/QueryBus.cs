@@ -14,7 +14,7 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
         where TQuery : class, IQuery<TResult>
         where TResult : class
     {
-        ArgumentNullException.ThrowIfNull(query);
+        if (query == null) throw new ArgumentNullException(nameof(query));
 
         var queryName = typeof(TQuery).FullName ?? typeof(TQuery).Name;
         var stopwatch = Stopwatch.StartNew();
