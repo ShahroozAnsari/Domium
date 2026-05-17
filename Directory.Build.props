@@ -1,12 +1,13 @@
 <Project>
   <PropertyGroup>
-    <Authors>Domium Contributors</Authors>
+    <Authors>Shahrooz Ansari</Authors>
     <Company>Domium</Company>
     <Product>Domium</Product>
     <Copyright>Copyright (c) Domium Contributors</Copyright>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>domium-icon.png</PackageIcon>
     <PackageTags>ddd;cqrs;clean-architecture;dotnet;domain-driven-design</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
@@ -19,5 +20,6 @@
 
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)assets/domium-icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 </Project>
