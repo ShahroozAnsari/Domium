@@ -1,6 +1,6 @@
 # Publishing Packages
 
-Domium is configured for CI builds and NuGet publishing through GitHub Actions.
+Domium is configured for CI builds and NuGet publishing through one GitHub Actions workflow.
 
 ## Package Metadata
 
@@ -45,7 +45,7 @@ Repository Settings -> Secrets and variables -> Actions -> New repository secret
 
 ## Versioning
 
-The publishing workflow supports two version sources:
+The CI/CD workflow supports two publish version sources:
 
 1. Tag-based publishing:
 
@@ -58,35 +58,29 @@ The workflow strips the leading `v` and publishes version `0.1.0`.
 
 2. Manual workflow dispatch:
 
-Run the `Publish NuGet Packages` workflow and provide a version such as:
+Run the `CI/CD` workflow manually, enable `publish`, and provide a version such as:
 
 ```text
 0.1.1
 ```
 
-## CI Workflow
+## CI/CD Workflow
 
-The CI workflow runs on pushes and pull requests:
+The single CI/CD workflow runs on pushes, pull requests, version tags, and manual dispatch.
+
+For normal branch pushes and pull requests it will:
 
 - restore
 - build
 - test
-- pack
+- pack CI package artifacts
 - upload package artifacts
 
-It does not publish packages.
+For `vX.Y.Z` tags, or manual runs with `publish` enabled, it will also:
 
-## Publish Workflow
-
-The publish workflow runs on version tags and manual dispatch:
-
-- restore
-- build
-- test
 - pack with the selected version
 - push `.nupkg` files to NuGet
 - push `.snupkg` symbol packages to NuGet
-- upload package artifacts
 
 NuGet push uses `--skip-duplicate` so rerunning the workflow is safe when a package version already exists.
 
@@ -95,7 +89,7 @@ NuGet push uses `--skip-duplicate` so rerunning the workflow is safe when a pack
 1. Update release notes or changelog if one is used.
 2. Confirm `dotnet test Domium.slnx --configuration Release` passes locally.
 3. Choose a semantic version.
-4. Push a `vX.Y.Z` tag or run the publish workflow manually.
+4. Push a `vX.Y.Z` tag or run the CI/CD workflow manually with `publish` enabled.
 5. Confirm packages appear on NuGet.
 6. Create a GitHub release from the tag.
 

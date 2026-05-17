@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -7,11 +7,24 @@ on:
       - master
       - develop
       - "release/**"
+    tags:
+      - "v*.*.*"
   pull_request:
     branches:
       - main
       - master
       - develop
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish packages to NuGet.org"
+        required: true
+        default: false
+        type: boolean
+      version:
+        description: "Package version to publish, for example 0.1.0"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,10 +33,11 @@ env:
   DOTNET_VERSION: "10.0.x"
   CONFIGURATION: Release
   PACKAGE_OUTPUT: artifacts/packages
+  NUGET_SOURCE: https://api.nuget.org/v3/index.json
 
 jobs:
-  build-test-pack:
-    name: Build, Test, Pack
+  build-test-pack-publish:
+    name: Build, Test, Pack, Publish
     runs-on: ubuntu-latest
 
     steps:
@@ -37,6 +51,36 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Resolve package settings
+        id: package
+        shell: bash
+        run: |
+          PUBLISH=false
+          VERSION=""
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            PUBLISH=true
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.publish }}" == "true" ]]; then
+            PUBLISH=true
+            VERSION="${{ inputs.version }}"
+          fi
+
+          if [[ "$PUBLISH" == "true" ]]; then
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+              echo "Invalid or missing package version: $VERSION" >&2
+              exit 1
+            fi
+
+            echo "version_args=/p:PackageVersion=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "artifact_version=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "version_args=/p:VersionSuffix=ci.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "artifact_version=ci-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+
       - name: Restore
         run: dotnet restore Domium.slnx
 
@@ -45,7 +89,7 @@ jobs:
           dotnet build Domium.slnx
           --configuration ${{ env.CONFIGURATION }}
           --no-restore
-          /p:VersionSuffix=ci.${{ github.run_number }}
+          ${{ steps.package.outputs.version_args }}
           /p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
 
       - name: Test
@@ -62,20 +106,55 @@ jobs:
           --configuration ${{ env.CONFIGURATION }}
           --no-build
           --output ${{ env.PACKAGE_OUTPUT }}
-          /p:VersionSuffix=ci.${{ github.run_number }}
+          ${{ steps.package.outputs.version_args }}
           /p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Publish packages
+        if: steps.package.outputs.publish == 'true'
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY repository secret is not configured." >&2
+            exit 1
+          fi
+
+          shopt -s nullglob
+
+          packages=("${{ env.PACKAGE_OUTPUT }}"/*.nupkg)
+          symbols=("${{ env.PACKAGE_OUTPUT }}"/*.snupkg)
+
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "No NuGet packages were produced." >&2
+            exit 1
+          fi
+
+          for package in "${packages[@]}"; do
+            dotnet nuget push "$package" \
+              --api-key "$NUGET_API_KEY" \
+              --source "${{ env.NUGET_SOURCE }}" \
+              --skip-duplicate
+          done
+
+          for symbols_package in "${symbols[@]}"; do
+            dotnet nuget push "$symbols_package" \
+              --api-key "$NUGET_API_KEY" \
+              --source "${{ env.NUGET_SOURCE }}" \
+              --skip-duplicate
+          done
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-${{ steps.package.outputs.artifact_version }}
+          path: ${{ env.PACKAGE_OUTPUT }}
+          if-no-files-found: error
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ steps.package.outputs.artifact_version }}
           path: artifacts/test-results
           if-no-files-found: ignore
-
-      - name: Upload packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-packages
-          path: ${{ env.PACKAGE_OUTPUT }}
-          if-no-files-found: error
