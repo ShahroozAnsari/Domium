@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <Description>Provider-neutral internal and external eventing abstractions for Domium.</Description>
   </PropertyGroup>
 
 </Project>

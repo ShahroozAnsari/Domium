@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  CONFIGURATION: Release
+  PACKAGE_OUTPUT: artifacts/packages
+
+jobs:
+  build-test-pack:
+    name: Build, Test, Pack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore Domium.slnx
+
+      - name: Build
+        run: >
+          dotnet build Domium.slnx
+          --configuration ${{ env.CONFIGURATION }}
+          --no-restore
+          /p:VersionSuffix=ci.${{ github.run_number }}
+          /p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Test
+        run: >
+          dotnet test Domium.slnx
+          --configuration ${{ env.CONFIGURATION }}
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory artifacts/test-results
+
+      - name: Pack
+        run: >
+          dotnet pack Domium.slnx
+          --configuration ${{ env.CONFIGURATION }}
+          --no-build
+          --output ${{ env.PACKAGE_OUTPUT }}
+          /p:VersionSuffix=ci.${{ github.run_number }}
+          /p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results
+          if-no-files-found: ignore
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ${{ env.PACKAGE_OUTPUT }}
+          if-no-files-found: error

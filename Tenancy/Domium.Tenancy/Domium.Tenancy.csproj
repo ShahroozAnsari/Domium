@@ -13,6 +13,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <Description>AsyncLocal tenant context and tenant scope helpers for Domium.</Description>
   </PropertyGroup>
 
 </Project>

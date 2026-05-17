@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <Description>Dapper persistence provider for Domium with SQL execution, scoped sessions, unit of work, and mapped aggregate repositories.</Description>
   </PropertyGroup>
 
   <ItemGroup>

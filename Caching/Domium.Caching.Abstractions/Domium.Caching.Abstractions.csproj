@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
+    <Description>Provider-neutral cache models, stores, and policy abstractions for Domium query caching.</Description>
   </PropertyGroup>
 
 </Project>

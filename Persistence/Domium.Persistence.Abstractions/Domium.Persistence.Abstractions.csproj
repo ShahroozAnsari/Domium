@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
+    <Description>Provider-neutral aggregate repository and unit-of-work abstractions for Domium persistence.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -15,6 +15,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Description>MassTransit integration for Domium external events.</Description>
   </PropertyGroup>
 
 </Project>

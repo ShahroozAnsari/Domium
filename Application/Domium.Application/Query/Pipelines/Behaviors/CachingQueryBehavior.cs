@@ -30,6 +30,8 @@ public sealed class CachingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavi
     /// <param name="cacheKeyProvider">The cache key provider.</param>
     /// <param name="policyProvider">The cache policy provider.</param>
     /// <param name="scopeProvider">The cache scope provider.</param>
+    /// <param name="invalidationMetadataProvider">The invalidation metadata provider.</param>
+    /// <param name="entryOptionsFactory">The cache entry options factory.</param>
     public CachingQueryBehavior(
         IDomiumCacheStore cacheStore,
         IDomiumCacheKeyProvider cacheKeyProvider,

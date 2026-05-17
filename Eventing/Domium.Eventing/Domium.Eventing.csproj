@@ -10,6 +10,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Description>In-process internal event publisher and default external event publisher for Domium.</Description>
   </PropertyGroup>
 
   <ItemGroup>

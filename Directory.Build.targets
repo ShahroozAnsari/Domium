@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup Condition="'$(RepositoryUrl)' != ''">
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+  </PropertyGroup>
+</Project>

@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
+    <Description>Tenant context abstractions for Domium.</Description>
   </PropertyGroup>
 
 </Project>

@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
+    <Description>Command/query buses, pipeline behaviors, and domain event dispatching for Domium applications.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <LangVersion>latest</LangVersion>
+    <Description>Concrete DDD primitives for Domium including aggregate roots, entities, value objects, aggregate identifiers, and domain events.</Description>
   </PropertyGroup>
 
   <ItemGroup>
