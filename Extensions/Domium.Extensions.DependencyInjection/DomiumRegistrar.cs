@@ -13,6 +13,7 @@ using Domium.Caching.Abstractions.Providers;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
+using Domium.Configuration;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;

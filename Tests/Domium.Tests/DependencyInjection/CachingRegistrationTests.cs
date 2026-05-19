@@ -5,6 +5,7 @@ using Domium.Caching.Abstractions.Results;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Exceptions;
 using Domium.Caching.Providers;
+using Domium.Configuration;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 

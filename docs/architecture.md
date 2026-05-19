@@ -11,6 +11,9 @@ Domain
 Application
   Commands, queries, handlers, validation, logging, transactions, caching
 
+Configuration
+  Composition options and provider selection settings
+
 Persistence
   Provider-neutral aggregate repository contract
   EF Core provider
@@ -26,6 +29,7 @@ Composition
 ## Design Rules
 
 - Domain packages do not depend on EF Core, Dapper, Redis, MassTransit, or OpenTelemetry.
+- Configuration options are independent from dependency injection so composition packages can consume them without owning the configuration model.
 - `IRepository<TAggregate, TId>` is for aggregate persistence only.
 - Query/read-model infrastructure is intentionally separate from aggregate persistence.
 - EF-specific specification querying lives in the EF Core package through `IEfRepository<TAggregate, TId>`.

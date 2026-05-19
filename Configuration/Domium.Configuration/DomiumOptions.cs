@@ -1,25 +1,22 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 
-namespace Domium.Extensions.DependencyInjection;
+namespace Domium.Configuration;
 
 public sealed class DomiumOptions
 {
     private readonly List<Assembly> _applicationAssemblies = new();
 
-    internal bool LoggingEnabled { get; private set; }
+    public bool LoggingEnabled { get; private set; }
 
-    internal bool ValidationEnabled { get; private set; }
+    public bool ValidationEnabled { get; private set; }
 
-    internal bool TransactionsEnabled { get; private set; }
+    public bool TransactionsEnabled { get; private set; }
 
-    internal bool CachingEnabled { get; private set; }
+    public bool CachingEnabled { get; private set; }
 
-    internal DomiumCachingOptions CachingOptions { get; } = new();
+    public DomiumCachingOptions CachingOptions { get; } = new();
 
-    internal IReadOnlyCollection<Assembly> ApplicationAssemblies => _applicationAssemblies.AsReadOnly();
+    public IReadOnlyCollection<Assembly> ApplicationAssemblies => _applicationAssemblies.AsReadOnly();
 
     public DomiumOptions UseLogging()
     {

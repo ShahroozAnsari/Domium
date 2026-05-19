@@ -1,4 +1,4 @@
-﻿using System;
+using Domium.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Extensions.DependencyInjection;

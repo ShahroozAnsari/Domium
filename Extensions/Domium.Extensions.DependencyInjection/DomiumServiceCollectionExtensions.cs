@@ -1,6 +1,6 @@
-using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Domium.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Extensions.DependencyInjection;

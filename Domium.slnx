@@ -10,6 +10,9 @@
     <Project Path="Caching/Domium.Caching.Redis/Domium.Caching.Redis.csproj" Id="20f85fcf-fecf-4943-be2b-0df92400dd87" />
     <Project Path="Caching/Domium.Caching/Domium.Caching.csproj" Id="ce8850c4-4a5a-4ace-ad2f-6a27ecee2ef7" />
   </Folder>
+  <Folder Name="/src/Configuration/">
+    <Project Path="Configuration/Domium.Configuration/Domium.Configuration.csproj" />
+  </Folder>
   <Folder Name="/src/Domain/">
     <Project Path="Domain/Domium.Domain.Abstractions/Domium.Domain.Abstractions.csproj" Id="7a4cb13f-9762-4d77-8890-3a41d5d1cd20" />
     <Project Path="Domain/Domium.Domain/Domium.Domain.csproj" Id="377106fa-d889-4f2d-a50a-225786a49470" />
