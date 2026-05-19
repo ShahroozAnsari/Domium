@@ -19,6 +19,10 @@
     <Project Path="Eventing/Domium.Eventing.MassTransit/Domium.Eventing.MassTransit.csproj" />
     <Project Path="Eventing/Domium.Eventing/Domium.Eventing.csproj" />
   </Folder>
+  <Folder Name="/src/Facade/">
+    <Project Path="Facade/Domium.Facade.Abstractions/Domium.Facade.Abstractions.csproj" />
+    <Project Path="Facade/Domium.Facade/Domium.Facade.csproj" />
+  </Folder>
   <Folder Name="/src/Extensions/">
     <Project Path="Extensions/Domium.Extensions.DependencyInjection/Domium.Extensions.DependencyInjection.csproj" Id="3bbbbabd-c2be-47d7-91ed-d5269ae8dac8" />
   </Folder>

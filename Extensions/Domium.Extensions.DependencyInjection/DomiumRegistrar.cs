@@ -17,6 +17,8 @@ using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
+using Domium.Facade;
+using Domium.Facade.Abstractions;
 using Domium.Persistence.Abstractions;
 using Domium.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +41,8 @@ internal static class DomiumRegistrar
     {
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
+        services.TryAddScoped<ICommandFacade, DomiumCommandFacade>();
+        services.TryAddScoped<IQueryFacade, DomiumQueryFacade>();
         services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddDomiumEventing();
         services.AddDomiumTenancy();
@@ -90,6 +94,11 @@ internal static class DomiumRegistrar
             .WithScopedLifetime()
 
             .AddClasses(c => c.AssignableTo(typeof(IExternalEventHandler<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo<IFacade>())
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
             .WithScopedLifetime()
