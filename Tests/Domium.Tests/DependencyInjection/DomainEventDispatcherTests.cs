@@ -1,3 +1,4 @@
+using Domium.Application.Abstractions.Command;
 using Domium.Domain;
 using Domium.Domain.Abstractions.Events;
 using Domium.Extensions.DependencyInjection;
@@ -34,6 +35,20 @@ public sealed class DomainEventDispatcherTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void AddDomium_fails_when_multiple_command_handlers_are_registered_for_same_command()
+    {
+        var services = new ServiceCollection();
+
+        services.AddScoped<ICommandHandler<DuplicateCommand>, DuplicateCommandHandler>();
+        services.AddScoped<ICommandHandler<DuplicateCommand>, AnotherDuplicateCommandHandler>();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => services.AddDomium(options => options.UseLoadedAssemblyScanning(false)));
+
+        Assert.Contains("multiple command handlers", exception.Message);
+    }
+
     public sealed class PingedDomainEvent(string message) : DomainEvent
     {
         public string Message { get; } = message;
@@ -53,6 +68,26 @@ public sealed class DomainEventDispatcherTests
             CancellationToken cancellationToken = default)
         {
             LastMessage = domainEvent.Message;
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class DuplicateCommand : ICommand
+    {
+    }
+
+    private abstract class DuplicateCommandHandler : ICommandHandler<DuplicateCommand>
+    {
+        public Task HandleAsync(DuplicateCommand command, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private abstract class AnotherDuplicateCommandHandler : ICommandHandler<DuplicateCommand>
+    {
+        public Task HandleAsync(DuplicateCommand command, CancellationToken cancellationToken = default)
+        {
             return Task.CompletedTask;
         }
     }

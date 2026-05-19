@@ -65,6 +65,9 @@ public static class DomiumConfiguration
             return;
         }
 
+        ValidateNoDuplicateCommandHandlers(assemblies);
+        ValidateNoDuplicateQueryHandlers(assemblies);
+
         services.Scan(scan => scan
             .FromAssemblies(assemblies)
 
@@ -156,27 +159,23 @@ public static class DomiumConfiguration
 
     private static bool IsDomiumFrameworkAssembly(string name)
     {
-        return name == "Domium.Configuration" ||
+        return name == "Domium" ||
+               name == "Domium.Configuration" ||
                name == "Domium.Domain" ||
-               name == "Domium.Domain.Abstractions" ||
+               name.StartsWith("Domium.Domain.", StringComparison.Ordinal) ||
                name == "Domium.Application" ||
-               name == "Domium.Application.Abstractions" ||
-               name == "Domium.Persistence.Abstractions" ||
-               name == "Domium.Persistence.EntityFrameworkCore" ||
-               name == "Domium.Persistence.Dapper" ||
+               name.StartsWith("Domium.Application.", StringComparison.Ordinal) ||
+               name.StartsWith("Domium.Persistence.", StringComparison.Ordinal) ||
+               name.StartsWith("Domium.Caching.", StringComparison.Ordinal) ||
                name == "Domium.Caching" ||
-               name == "Domium.Caching.Abstractions" ||
-               name == "Domium.Caching.Memory" ||
-               name == "Domium.Caching.Redis" ||
                name == "Domium.Eventing" ||
-               name == "Domium.Eventing.Abstractions" ||
-               name == "Domium.Eventing.MassTransit" ||
+               name.StartsWith("Domium.Eventing.", StringComparison.Ordinal) ||
                name == "Domium.Facade" ||
-               name == "Domium.Facade.Abstractions" ||
+               name.StartsWith("Domium.Facade.", StringComparison.Ordinal) ||
                name == "Domium.Observability" ||
-               name == "Domium.Observability.OpenTelemetry" ||
+               name.StartsWith("Domium.Observability.", StringComparison.Ordinal) ||
                name == "Domium.Tenancy" ||
-               name == "Domium.Tenancy.Abstractions" ||
+               name.StartsWith("Domium.Tenancy.", StringComparison.Ordinal) ||
                name == "Domium.Extensions.DependencyInjection";
     }
 
@@ -305,11 +304,90 @@ public static class DomiumConfiguration
 
     private static void ValidateHandlers(IServiceCollection services)
     {
-        ValidateNoDuplicateCommandHandlers(services);
-        ValidateNoDuplicateQueryHandlers(services);
+        ValidateNoDuplicateRegisteredCommandHandlers(services);
+        ValidateNoDuplicateRegisteredQueryHandlers(services);
     }
 
-    private static void ValidateNoDuplicateCommandHandlers(IServiceCollection services)
+    private static void ValidateNoDuplicateCommandHandlers(IEnumerable<Assembly> assemblies)
+    {
+        var duplicates = GetClosedServiceImplementations(assemblies, typeof(ICommandHandler<>))
+            .GroupBy(pair => pair.ServiceType)
+            .Where(group => group.Count() > 1)
+            .Select(group => FormatDuplicateHandler(group.Key, group.Select(pair => pair.ImplementationType)))
+            .ToArray();
+
+        if (duplicates.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Domium found multiple command handlers: " + string.Join("; ", duplicates));
+        }
+    }
+
+    private static void ValidateNoDuplicateQueryHandlers(IEnumerable<Assembly> assemblies)
+    {
+        var duplicates = GetClosedServiceImplementations(assemblies, typeof(IQueryHandler<,>))
+            .GroupBy(pair => pair.ServiceType)
+            .Where(group => group.Count() > 1)
+            .Select(group => FormatDuplicateHandler(group.Key, group.Select(pair => pair.ImplementationType)))
+            .ToArray();
+
+        if (duplicates.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Domium found multiple query handlers: " + string.Join("; ", duplicates));
+        }
+    }
+
+    private static IEnumerable<(Type ServiceType, Type ImplementationType)> GetClosedServiceImplementations(
+        IEnumerable<Assembly> assemblies,
+        Type openGenericServiceType)
+    {
+        foreach (var assembly in assemblies)
+        {
+            foreach (var type in GetLoadableTypes(assembly))
+            {
+                if (!type.IsClass || type.IsAbstract)
+                {
+                    continue;
+                }
+
+                foreach (var serviceType in type.GetInterfaces())
+                {
+                    if (serviceType.IsGenericType &&
+                        serviceType.GetGenericTypeDefinition() == openGenericServiceType)
+                    {
+                        yield return (serviceType, type);
+                    }
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException exception)
+        {
+            return exception.Types.Where(type => type is not null)!;
+        }
+    }
+
+    private static string FormatDuplicateHandler(
+        Type serviceType,
+        IEnumerable<Type> implementationTypes)
+    {
+        var implementations = implementationTypes
+            .Select(type => type.FullName ?? type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        return $"{serviceType.FullName ?? serviceType.Name} ({string.Join(", ", implementations)})";
+    }
+
+    private static void ValidateNoDuplicateRegisteredCommandHandlers(IServiceCollection services)
     {
         var duplicates = services
             .Where(d => d.ServiceType.IsGenericType &&
@@ -326,7 +404,7 @@ public static class DomiumConfiguration
         }
     }
 
-    private static void ValidateNoDuplicateQueryHandlers(IServiceCollection services)
+    private static void ValidateNoDuplicateRegisteredQueryHandlers(IServiceCollection services)
     {
         var duplicates = services
             .Where(d => d.ServiceType.IsGenericType &&

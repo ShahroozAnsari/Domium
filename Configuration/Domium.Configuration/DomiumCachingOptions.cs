@@ -6,5 +6,5 @@ public sealed class DomiumCachingOptions
 
     public TimeSpan DefaultExpiration { get; set; } = TimeSpan.FromMinutes(5);
 
-    public string RedisConnectionString { get; set; } = "localhost";
+    public string? RedisConnectionString { get; set; }
 }

@@ -101,9 +101,31 @@ public sealed class CachingRegistrationTests
 
         var exception = Assert.Throws<InvalidOperationException>(
             () => services.AddDomium(options =>
-                options.UseCaching(cacheOptions => cacheOptions.Provider = DomiumCacheProvider.Redis)));
+                options.UseCaching(cacheOptions =>
+                {
+                    cacheOptions.Provider = DomiumCacheProvider.Redis;
+                    cacheOptions.RedisConnectionString = "localhost";
+                })));
 
         Assert.Contains("AddDomiumRedisCacheStore", exception.Message);
+    }
+
+    [Fact]
+    public void Redis_caching_requires_explicit_connection_string()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IDomiumCacheStore>(new CapturingCacheStore());
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => services.AddDomium(options =>
+                options.UseCaching(cacheOptions =>
+                {
+                    cacheOptions.Provider = DomiumCacheProvider.Redis;
+                    cacheOptions.RedisConnectionString = null;
+                })));
+
+        Assert.Contains("Redis caching requires a non-empty Redis connection string", exception.Message);
     }
 
     private static void RegisterPolicy(

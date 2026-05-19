@@ -23,7 +23,6 @@
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing\Domium.Eventing.csproj" />
     <ProjectReference Include="..\..\Facade\Domium.Facade.Abstractions\Domium.Facade.Abstractions.csproj" />
-    <ProjectReference Include="..\..\Facade\Domium.Facade\Domium.Facade.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
     <ProjectReference Include="..\..\Tenancy\Domium.Tenancy\Domium.Tenancy.csproj" />
     <ProjectReference Include="..\..\Tenancy\Domium.Tenancy.Abstractions\Domium.Tenancy.Abstractions.csproj" />

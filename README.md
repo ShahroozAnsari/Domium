@@ -307,6 +307,7 @@ services.AddDomium(options =>
     options.UseCaching(cache =>
     {
         cache.Provider = DomiumCacheProvider.Redis;
+        cache.RedisConnectionString = "localhost";
         cache.DefaultExpiration = TimeSpan.FromMinutes(5);
     });
 });
