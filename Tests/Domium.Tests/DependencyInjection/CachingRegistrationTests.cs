@@ -8,6 +8,7 @@ using Domium.Caching.Providers;
 using Domium.Configuration;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 
 namespace Domium.Tests.DependencyInjection;
 
@@ -95,19 +96,21 @@ public sealed class CachingRegistrationTests
     }
 
     [Fact]
-    public void Redis_caching_requires_explicit_redis_store_registration()
+    public void Redis_caching_registers_cache_store_from_options()
     {
         var services = new ServiceCollection();
 
-        var exception = Assert.Throws<InvalidOperationException>(
-            () => services.AddDomium(options =>
+        var exception = Record.Exception(() =>
+            services.AddDomium(options =>
                 options.UseCaching(cacheOptions =>
                 {
                     cacheOptions.Provider = DomiumCacheProvider.Redis;
                     cacheOptions.RedisConnectionString = "localhost";
                 })));
 
-        Assert.Contains("AddDomiumRedisCacheStore", exception.Message);
+        Assert.Null(exception);
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCacheStore));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IConnectionMultiplexer));
     }
 
     [Fact]
@@ -115,14 +118,12 @@ public sealed class CachingRegistrationTests
     {
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumCacheStore>(new CapturingCacheStore());
-
-        var exception = Assert.Throws<InvalidOperationException>(
-            () => services.AddDomium(options =>
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddDomium(options =>
                 options.UseCaching(cacheOptions =>
                 {
                     cacheOptions.Provider = DomiumCacheProvider.Redis;
-                    cacheOptions.RedisConnectionString = null;
+                    cacheOptions.RedisConnectionString = string.Empty;
                 })));
 
         Assert.Contains("Redis caching requires a non-empty Redis connection string", exception.Message);

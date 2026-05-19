@@ -47,6 +47,21 @@ public sealed class DomainEventDispatcherTests
             () => services.AddDomium(options => options.UseLoadedAssemblyScanning(false)));
 
         Assert.Contains("multiple command handlers", exception.Message);
+        Assert.Contains(nameof(DuplicateCommandHandler), exception.Message);
+        Assert.Contains(nameof(AnotherDuplicateCommandHandler), exception.Message);
+    }
+
+    [Fact]
+    public void AddDomium_respects_loaded_assembly_name_prefix_filter()
+    {
+        var services = new ServiceCollection();
+
+        services.AddDomium(options =>
+            options.AddApplicationAssemblyNamePrefix("Definitely.Not.Domium.Tests"));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Empty(provider.GetServices<IDomainEventHandler<PingedDomainEvent>>());
     }
 
     public sealed class PingedDomainEvent(string message) : DomainEvent

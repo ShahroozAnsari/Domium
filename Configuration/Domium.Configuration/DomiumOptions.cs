@@ -5,6 +5,7 @@ namespace Domium.Configuration;
 public sealed class DomiumOptions
 {
     private readonly List<Assembly> _applicationAssemblies = new();
+    private readonly List<string> _applicationAssemblyNamePrefixes = new();
 
     public bool LoadedAssemblyScanningEnabled { get; private set; } = true;
 
@@ -19,6 +20,9 @@ public sealed class DomiumOptions
     public DomiumCachingOptions CachingOptions { get; } = new();
 
     public IReadOnlyCollection<Assembly> ApplicationAssemblies => _applicationAssemblies.AsReadOnly();
+
+    public IReadOnlyCollection<string> ApplicationAssemblyNamePrefixes =>
+        _applicationAssemblyNamePrefixes.AsReadOnly();
 
     public DomiumOptions UseLoadedAssemblyScanning(bool enabled = true)
     {
@@ -81,6 +85,38 @@ public sealed class DomiumOptions
         foreach (var assembly in assemblies)
         {
             AddApplicationAssembly(assembly);
+        }
+
+        return this;
+    }
+
+    public DomiumOptions AddApplicationAssemblyNamePrefix(string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            throw new ArgumentException("Application assembly name prefix cannot be empty.", nameof(prefix));
+        }
+
+        var normalizedPrefix = prefix.Trim();
+
+        if (!_applicationAssemblyNamePrefixes.Contains(normalizedPrefix, StringComparer.Ordinal))
+        {
+            _applicationAssemblyNamePrefixes.Add(normalizedPrefix);
+        }
+
+        return this;
+    }
+
+    public DomiumOptions AddApplicationAssemblyNamePrefixes(params string[] prefixes)
+    {
+        if (prefixes == null)
+        {
+            throw new ArgumentNullException(nameof(prefixes));
+        }
+
+        foreach (var prefix in prefixes)
+        {
+            AddApplicationAssemblyNamePrefix(prefix);
         }
 
         return this;

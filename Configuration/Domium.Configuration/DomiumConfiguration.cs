@@ -14,6 +14,7 @@ using Domium.Caching.Abstractions.Providers;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
+using Domium.Caching.Redis;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
@@ -123,7 +124,7 @@ public static class DomiumConfiguration
         {
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                if (IsApplicationAssembly(assembly))
+                if (IsApplicationAssembly(assembly, options))
                 {
                     yield return assembly;
                 }
@@ -136,7 +137,7 @@ public static class DomiumConfiguration
         }
     }
 
-    private static bool IsApplicationAssembly(Assembly assembly)
+    private static bool IsApplicationAssembly(Assembly assembly, DomiumOptions options)
     {
         if (assembly.IsDynamic)
         {
@@ -146,6 +147,13 @@ public static class DomiumConfiguration
         var name = assembly.GetName().Name;
 
         if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        if (options.ApplicationAssemblyNamePrefixes.Count > 0 &&
+            !options.ApplicationAssemblyNamePrefixes.Any(
+                prefix => name.StartsWith(prefix, StringComparison.Ordinal)))
         {
             return false;
         }
@@ -162,20 +170,25 @@ public static class DomiumConfiguration
         return name == "Domium" ||
                name == "Domium.Configuration" ||
                name == "Domium.Domain" ||
-               name.StartsWith("Domium.Domain.", StringComparison.Ordinal) ||
+               name == "Domium.Domain.Abstractions" ||
                name == "Domium.Application" ||
-               name.StartsWith("Domium.Application.", StringComparison.Ordinal) ||
-               name.StartsWith("Domium.Persistence.", StringComparison.Ordinal) ||
-               name.StartsWith("Domium.Caching.", StringComparison.Ordinal) ||
+               name == "Domium.Application.Abstractions" ||
+               name == "Domium.Persistence.Abstractions" ||
+               name == "Domium.Persistence.EntityFrameworkCore" ||
+               name == "Domium.Persistence.Dapper" ||
                name == "Domium.Caching" ||
+               name == "Domium.Caching.Abstractions" ||
+               name == "Domium.Caching.Memory" ||
+               name == "Domium.Caching.Redis" ||
                name == "Domium.Eventing" ||
-               name.StartsWith("Domium.Eventing.", StringComparison.Ordinal) ||
+               name == "Domium.Eventing.Abstractions" ||
+               name == "Domium.Eventing.MassTransit" ||
                name == "Domium.Facade" ||
-               name.StartsWith("Domium.Facade.", StringComparison.Ordinal) ||
+               name == "Domium.Facade.Abstractions" ||
                name == "Domium.Observability" ||
-               name.StartsWith("Domium.Observability.", StringComparison.Ordinal) ||
+               name == "Domium.Observability.OpenTelemetry" ||
                name == "Domium.Tenancy" ||
-               name.StartsWith("Domium.Tenancy.", StringComparison.Ordinal) ||
+               name == "Domium.Tenancy.Abstractions" ||
                name == "Domium.Extensions.DependencyInjection";
     }
 
@@ -235,7 +248,11 @@ public static class DomiumConfiguration
 
             services.TryAddSingleton<IDomiumCacheStore, MemoryDomiumCacheStore>();
         }
-        ValidateCacheStoreRegistration(services, options);
+
+        if (options.Provider == DomiumCacheProvider.Redis)
+        {
+            services.AddDomiumRedisCacheStore(options.RedisConnectionString);
+        }
 
         services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
         services.TryAddSingleton<DomiumQueryCachePolicyProvider>();
@@ -281,24 +298,6 @@ public static class DomiumConfiguration
         {
             throw new InvalidOperationException(
                 "Transactions require an IUnitOfWork registration. Register a persistence provider before calling AddDomium with UseTransactions.");
-        }
-    }
-
-    private static void ValidateCacheStoreRegistration(
-        IServiceCollection services,
-        DomiumCachingOptions options)
-    {
-        if (options.Provider != DomiumCacheProvider.Redis)
-        {
-            return;
-        }
-
-        var hasCacheStore = services.Any(service => service.ServiceType == typeof(IDomiumCacheStore));
-
-        if (!hasCacheStore)
-        {
-            throw new InvalidOperationException(
-                "Redis caching requires an IDomiumCacheStore registration. Call AddDomiumRedisCacheStore before AddDomium.");
         }
     }
 
@@ -394,7 +393,7 @@ public static class DomiumConfiguration
                         d.ServiceType.GetGenericTypeDefinition() == typeof(ICommandHandler<>))
             .GroupBy(d => d.ServiceType)
             .Where(g => g.Count() > 1)
-            .Select(g => g.Key.FullName ?? g.Key.Name)
+            .Select(g => FormatDuplicateRegistration(g.Key, g))
             .ToArray();
 
         if (duplicates.Length > 0)
@@ -411,7 +410,7 @@ public static class DomiumConfiguration
                         d.ServiceType.GetGenericTypeDefinition() == typeof(IQueryHandler<,>))
             .GroupBy(d => d.ServiceType)
             .Where(g => g.Count() > 1)
-            .Select(g => g.Key.FullName ?? g.Key.Name)
+            .Select(g => FormatDuplicateRegistration(g.Key, g))
             .ToArray();
 
         if (duplicates.Length > 0)
@@ -419,5 +418,35 @@ public static class DomiumConfiguration
             throw new InvalidOperationException(
                 "Domium found multiple query handlers: " + string.Join(", ", duplicates));
         }
+    }
+
+    private static string FormatDuplicateRegistration(
+        Type serviceType,
+        IEnumerable<ServiceDescriptor> descriptors)
+    {
+        var implementations = descriptors
+            .Select(GetImplementationName)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        return $"{serviceType.FullName ?? serviceType.Name} ({string.Join(", ", implementations)})";
+    }
+
+    private static string GetImplementationName(ServiceDescriptor descriptor)
+    {
+        if (descriptor.ImplementationType is not null)
+        {
+            return descriptor.ImplementationType.FullName ?? descriptor.ImplementationType.Name;
+        }
+
+        if (descriptor.ImplementationInstance is not null)
+        {
+            var instanceType = descriptor.ImplementationInstance.GetType();
+            return instanceType.FullName ?? instanceType.Name;
+        }
+
+        return descriptor.ImplementationFactory is not null
+            ? "<factory>"
+            : "<unknown>";
     }
 }
