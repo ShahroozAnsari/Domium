@@ -21,7 +21,7 @@ Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It
 | --- | --- |
 | `Domium.Domain.Abstractions` | Domain contracts for entities, aggregate roots, IDs, value objects, and domain events. |
 | `Domium.Domain` | Concrete domain primitives such as `AggregateRoot<TId>`, `EntityBase<TId>`, `AggregateId<T>`, and `DomainEvent`. |
-| `Domium.Configuration` | Shared framework configuration objects used by composition packages. |
+| `Domium.Configuration` | Core composition options and registration pipeline used by `AddDomium`. |
 | `Domium.Application.Abstractions` | Command/query buses, handlers, validators, and pipeline contracts. |
 | `Domium.Application` | Command/query buses, pipeline behaviors, and domain event dispatching. |
 | `Domium.Facade.Abstractions` | Facade marker contract for exposing one module-level API to other layers. |
@@ -341,7 +341,7 @@ services.AddMassTransit(configurator =>
 ## Observability
 
 ```csharp
-using Domium.Configuration;
+using Domium.Observability.OpenTelemetry;
 
 services.AddDomiumOpenTelemetry(options =>
 {

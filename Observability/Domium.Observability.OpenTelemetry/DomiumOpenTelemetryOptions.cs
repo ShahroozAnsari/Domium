@@ -1,4 +1,4 @@
-namespace Domium.Configuration;
+namespace Domium.Observability.OpenTelemetry;
 
 /// <summary>
 /// Options for Domium OpenTelemetry integration.

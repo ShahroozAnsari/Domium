@@ -14,7 +14,6 @@ using Domium.Caching.Abstractions.Providers;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
-using Domium.Configuration;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
@@ -26,16 +25,23 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Scrutor;
 
-namespace Domium.Extensions.DependencyInjection;
+namespace Domium.Configuration;
 
-internal static class DomiumRegistrar
+public static class DomiumConfiguration
 {
-    public static void Register(IDomiumBuilder builder)
+    public static IServiceCollection Register(
+        IServiceCollection services,
+        DomiumOptions options)
     {
-        RegisterCore(builder.Services);
-        RegisterApplicationTypes(builder.Services, builder.Options);
-        RegisterOptionalBehaviors(builder.Services, builder.Options);
-        ValidateHandlers(builder.Services);
+        if (services == null) throw new ArgumentNullException(nameof(services));
+        if (options == null) throw new ArgumentNullException(nameof(options));
+
+        RegisterCore(services);
+        RegisterApplicationTypes(services, options);
+        RegisterOptionalBehaviors(services, options);
+        ValidateHandlers(services);
+
+        return services;
     }
 
     private static void RegisterCore(IServiceCollection services)

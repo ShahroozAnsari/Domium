@@ -17,10 +17,6 @@ public static class DomiumServiceCollectionExtensions
 
         configure?.Invoke(options);
 
-        var builder = new DomiumBuilder(services, options);
-
-        DomiumRegistrar.Register(builder);
-
-        return services;
+        return DomiumConfiguration.Register(services, options);
     }
 }
