@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Configuration\Domium.Configuration\Domium.Configuration.csproj" />
     <ProjectReference Include="..\Domium.Observability\Domium.Observability.csproj" />
   </ItemGroup>
 

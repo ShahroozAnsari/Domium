@@ -1,3 +1,4 @@
+using Domium.Configuration;
 using Domium.Observability;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

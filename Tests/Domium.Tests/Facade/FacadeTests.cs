@@ -10,7 +10,7 @@ namespace Domium.Tests.Facade;
 public sealed class FacadeTests
 {
     [Fact]
-    public async Task AddDomium_registers_application_facades_from_application_assembly()
+    public async Task AddDomium_registers_application_facades_from_loaded_assemblies()
     {
         RenameHandler.Reset();
         var services = new ServiceCollection();

@@ -12,7 +12,10 @@ Application
   Commands, queries, handlers, validation, logging, transactions, caching
 
 Configuration
-  Composition options and provider selection settings
+  Composition options, provider selection settings, telemetry settings
+
+Facade
+  Module-level APIs exposed to presentation layers or other modules
 
 Persistence
   Provider-neutral aggregate repository contract
@@ -30,8 +33,10 @@ Composition
 
 - Domain packages do not depend on EF Core, Dapper, Redis, MassTransit, or OpenTelemetry.
 - Configuration options are independent from dependency injection so composition packages can consume them without owning the configuration model.
+- `AddDomium` scans loaded non-framework application assemblies by default. Explicit assembly registration is still available for assemblies that have not been loaded yet.
 - `IRepository<TAggregate, TId>` is for aggregate persistence only.
 - Query/read-model infrastructure is intentionally separate from aggregate persistence.
+- Facades may expose both command and query use cases as a single module API, but each method should delegate to the correct application command or query path.
 - EF-specific specification querying lives in the EF Core package through `IEfRepository<TAggregate, TId>`.
 - Dapper aggregate persistence is opt-in and requires explicit mappers.
 - Provider packages register their own infrastructure so `Domium.Extensions.DependencyInjection` stays lightweight.
@@ -63,6 +68,12 @@ services.AddDomiumEntityFrameworkCore<AppDbContext>(options =>
 });
 
 services.AddDomium(options => options.UseTransactions());
+```
+
+Transaction registration is explicitly toggleable:
+
+```csharp
+services.AddDomium(options => options.UseTransactions(false));
 ```
 
 ## Query Side

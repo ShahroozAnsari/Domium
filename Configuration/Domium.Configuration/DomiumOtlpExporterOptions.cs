@@ -1,4 +1,4 @@
-namespace Domium.Observability.OpenTelemetry;
+namespace Domium.Configuration;
 
 /// <summary>
 /// Options for the OpenTelemetry Protocol exporter.

@@ -23,6 +23,17 @@ public sealed class DomainEventDispatcherTests
         Assert.Equal("ready", PingedHandler.LastMessage);
     }
 
+    [Fact]
+    public void AddDomium_allows_explicitly_disabled_transactions_without_unit_of_work()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Record.Exception(() =>
+            services.AddDomium(options => options.UseTransactions(false)));
+
+        Assert.Null(exception);
+    }
+
     public sealed class PingedDomainEvent(string message) : DomainEvent
     {
         public string Message { get; } = message;

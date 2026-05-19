@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using Domium.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +14,6 @@ public static class DomiumServiceCollectionExtensions
         if (services == null) throw new ArgumentNullException(nameof(services));
 
         var options = new DomiumOptions();
-        options.AddApplicationAssembly(Assembly.GetCallingAssembly());
 
         configure?.Invoke(options);
 

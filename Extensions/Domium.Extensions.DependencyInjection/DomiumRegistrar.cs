@@ -1,3 +1,4 @@
+using System.Reflection;
 using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Application.Abstractions.Command.Validation;
@@ -48,7 +49,7 @@ internal static class DomiumRegistrar
 
     private static void RegisterApplicationTypes(IServiceCollection services, DomiumOptions options)
     {
-        var assemblies = options.ApplicationAssemblies
+        var assemblies = GetApplicationAssemblies(options)
             .Where(assembly => assembly is { IsDynamic: false })
             .Distinct()
             .ToArray();
@@ -105,6 +106,72 @@ internal static class DomiumRegistrar
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
             .WithSingletonLifetime());
+    }
+
+    private static IEnumerable<Assembly> GetApplicationAssemblies(DomiumOptions options)
+    {
+        if (options.LoadedAssemblyScanningEnabled)
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (IsApplicationAssembly(assembly))
+                {
+                    yield return assembly;
+                }
+            }
+        }
+
+        foreach (var assembly in options.ApplicationAssemblies)
+        {
+            yield return assembly;
+        }
+    }
+
+    private static bool IsApplicationAssembly(Assembly assembly)
+    {
+        if (assembly.IsDynamic)
+        {
+            return false;
+        }
+
+        var name = assembly.GetName().Name;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        return !name.StartsWith("System.", StringComparison.Ordinal) &&
+               !name.StartsWith("Microsoft.", StringComparison.Ordinal) &&
+               !name.StartsWith("mscorlib", StringComparison.Ordinal) &&
+               !name.StartsWith("netstandard", StringComparison.Ordinal) &&
+               !IsDomiumFrameworkAssembly(name);
+    }
+
+    private static bool IsDomiumFrameworkAssembly(string name)
+    {
+        return name == "Domium.Configuration" ||
+               name == "Domium.Domain" ||
+               name == "Domium.Domain.Abstractions" ||
+               name == "Domium.Application" ||
+               name == "Domium.Application.Abstractions" ||
+               name == "Domium.Persistence.Abstractions" ||
+               name == "Domium.Persistence.EntityFrameworkCore" ||
+               name == "Domium.Persistence.Dapper" ||
+               name == "Domium.Caching" ||
+               name == "Domium.Caching.Abstractions" ||
+               name == "Domium.Caching.Memory" ||
+               name == "Domium.Caching.Redis" ||
+               name == "Domium.Eventing" ||
+               name == "Domium.Eventing.Abstractions" ||
+               name == "Domium.Eventing.MassTransit" ||
+               name == "Domium.Facade" ||
+               name == "Domium.Facade.Abstractions" ||
+               name == "Domium.Observability" ||
+               name == "Domium.Observability.OpenTelemetry" ||
+               name == "Domium.Tenancy" ||
+               name == "Domium.Tenancy.Abstractions" ||
+               name == "Domium.Extensions.DependencyInjection";
     }
 
     private static void RegisterOptionalBehaviors(IServiceCollection services, DomiumOptions options)

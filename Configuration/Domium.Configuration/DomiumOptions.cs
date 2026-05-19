@@ -6,6 +6,8 @@ public sealed class DomiumOptions
 {
     private readonly List<Assembly> _applicationAssemblies = new();
 
+    public bool LoadedAssemblyScanningEnabled { get; private set; } = true;
+
     public bool LoggingEnabled { get; private set; }
 
     public bool ValidationEnabled { get; private set; }
@@ -18,29 +20,38 @@ public sealed class DomiumOptions
 
     public IReadOnlyCollection<Assembly> ApplicationAssemblies => _applicationAssemblies.AsReadOnly();
 
-    public DomiumOptions UseLogging()
+    public DomiumOptions UseLoadedAssemblyScanning(bool enabled = true)
     {
-        LoggingEnabled = true;
+        LoadedAssemblyScanningEnabled = enabled;
         return this;
     }
 
-    public DomiumOptions UseValidation()
+    public DomiumOptions UseLogging(bool enabled = true)
     {
-        ValidationEnabled = true;
+        LoggingEnabled = enabled;
         return this;
     }
 
-    public DomiumOptions UseTransactions()
+    public DomiumOptions UseValidation(bool enabled = true)
     {
-        TransactionsEnabled = true;
+        ValidationEnabled = enabled;
         return this;
     }
 
-    public DomiumOptions UseCaching(Action<DomiumCachingOptions>? configure = null)
+    public DomiumOptions UseTransactions(bool enabled = true)
     {
-        CachingEnabled = true;
+        TransactionsEnabled = enabled;
+        return this;
+    }
 
-        configure?.Invoke(CachingOptions);
+    public DomiumOptions UseCaching(Action<DomiumCachingOptions>? configure = null, bool enabled = true)
+    {
+        CachingEnabled = enabled;
+
+        if (enabled)
+        {
+            configure?.Invoke(CachingOptions);
+        }
 
         return this;
     }

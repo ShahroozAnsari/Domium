@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/Logo.svg" alt="Domium" width="320" />
+</p>
+
 # Domium
 
 Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It gives you focused building blocks for aggregate modeling, command and query pipelines, provider-selectable persistence, tenant-aware caching, eventing, and observability without forcing one infrastructure style on every application.
@@ -20,6 +24,8 @@ Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It
 | `Domium.Configuration` | Shared framework configuration objects used by composition packages. |
 | `Domium.Application.Abstractions` | Command/query buses, handlers, validators, and pipeline contracts. |
 | `Domium.Application` | Command/query buses, pipeline behaviors, and domain event dispatching. |
+| `Domium.Facade.Abstractions` | Facade marker contract for exposing one module-level API to other layers. |
+| `Domium.Facade` | Base facade helper that delegates to command and query buses while keeping CQRS inside the application layer. |
 | `Domium.Persistence.Abstractions` | Provider-neutral aggregate repository and unit-of-work contracts. |
 | `Domium.Persistence.EntityFrameworkCore` | EF Core aggregate repository, DbContext base, unit of work, and EF-specific specifications. |
 | `Domium.Persistence.Dapper` | Dapper session, SQL executor, unit of work, and optional mapped aggregate repository. |
@@ -44,6 +50,7 @@ Install the packages you need. A typical application starts with:
 dotnet add package Domium.Domain
 dotnet add package Domium.Application
 dotnet add package Domium.Configuration
+dotnet add package Domium.Facade
 dotnet add package Domium.Extensions.DependencyInjection
 ```
 
@@ -62,6 +69,9 @@ dotnet add package Domium.Observability.OpenTelemetry
 Register Domium with the fluent API:
 
 ```csharp
+using Domium.Configuration;
+using Domium.Extensions.DependencyInjection;
+
 services.AddDomium(options =>
 {
     options
@@ -76,12 +86,25 @@ services.AddDomium(options =>
 });
 ```
 
-When handlers live outside the assembly that calls `AddDomium`, register those assemblies explicitly:
+`AddDomium` scans loaded non-framework application assemblies by default, so most applications do not need to pass an assembly manually. When handlers live in an assembly that is not loaded yet, register it explicitly:
 
 ```csharp
 services.AddDomium(options =>
 {
     options.AddApplicationAssembly(typeof(CreateOrderHandler).Assembly);
+});
+```
+
+Feature toggles accept explicit booleans:
+
+```csharp
+services.AddDomium(options =>
+{
+    options
+        .UseValidation()
+        .UseLogging(false)
+        .UseTransactions(false)
+        .UseCaching(enabled: false);
 });
 ```
 
@@ -138,6 +161,33 @@ Queries return read models or DTOs:
 public sealed record GetOrderQuery(Guid Id) : IQuery<OrderReadModel>;
 
 public sealed record OrderReadModel(Guid Id, string Number);
+```
+
+## Facades
+
+Facades provide one module-level dependency to other layers while CQRS stays enforced in the application layer.
+
+```csharp
+public interface IOrderFacade : IFacade
+{
+    Task CreateAsync(CreateOrderRequest request, CancellationToken cancellationToken = default);
+
+    Task<OrderReadModel> GetAsync(Guid id, CancellationToken cancellationToken = default);
+}
+
+public sealed class OrderFacade(ICommandBus commandBus, IQueryBus queryBus)
+    : DomiumFacade(commandBus, queryBus), IOrderFacade
+{
+    public Task CreateAsync(CreateOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        return ExecuteAsync(new CreateOrderCommand(request.Number), cancellationToken);
+    }
+
+    public Task<OrderReadModel> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return QueryAsync<GetOrderQuery, OrderReadModel>(new GetOrderQuery(id), cancellationToken);
+    }
+}
 ```
 
 ## Persistence
@@ -291,6 +341,8 @@ services.AddMassTransit(configurator =>
 ## Observability
 
 ```csharp
+using Domium.Configuration;
+
 services.AddDomiumOpenTelemetry(options =>
 {
     options.ServiceName = "Orders.Api";
