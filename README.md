@@ -1,12 +1,8 @@
 <p align="center">
-  <img src="assets/Logo.svg" alt="Domium" width="320" />
+  <img src="assets/social-preview.png" alt="Domium social preview" width="860" />
 </p>
 
 # Domium
-
-<p align="center">
-  <img src="assets/social-preview.svg" alt="Domium social preview" width="860" />
-</p>
 
 Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It gives you focused building blocks for aggregate modeling, command and query pipelines, provider-selectable persistence, tenant-aware caching, eventing, and observability without forcing one infrastructure style on every application.
 
