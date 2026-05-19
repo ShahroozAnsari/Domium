@@ -17,7 +17,6 @@ using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
-using Domium.Facade;
 using Domium.Facade.Abstractions;
 using Domium.Persistence.Abstractions;
 using Domium.Tenancy;
@@ -41,8 +40,6 @@ internal static class DomiumRegistrar
     {
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
-        services.TryAddScoped<ICommandFacade, DomiumCommandFacade>();
-        services.TryAddScoped<IQueryFacade, DomiumQueryFacade>();
         services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddDomiumEventing();
         services.AddDomiumTenancy();

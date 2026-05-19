@@ -10,47 +10,6 @@ namespace Domium.Tests.Facade;
 public sealed class FacadeTests
 {
     [Fact]
-    public async Task AddDomium_registers_separate_command_and_query_facades()
-    {
-        RenameHandler.Reset();
-        var services = new ServiceCollection();
-
-        services.AddDomium();
-
-        await using var provider = services.BuildServiceProvider();
-        var commandFacade = provider.GetRequiredService<ICommandFacade>();
-        var queryFacade = provider.GetRequiredService<IQueryFacade>();
-
-        await commandFacade.ExecuteAsync(new RenameCommand("split"));
-        var result = await queryFacade.QueryAsync<GetNameQuery, NameResult>(new GetNameQuery());
-
-        Assert.Equal("split", RenameHandler.Name);
-        Assert.Equal("split", result.Value);
-    }
-
-    [Fact]
-    public void AddDomium_does_not_register_combined_domium_facade_contract()
-    {
-        var services = new ServiceCollection();
-
-        services.AddDomium();
-
-        var combinedFacadeRegistration = services.SingleOrDefault(
-            service => service.ServiceType.Name == "IDomiumFacade");
-
-        Assert.Null(combinedFacadeRegistration);
-    }
-
-    [Fact]
-    public void Command_and_query_dispatch_facades_are_not_application_facade_markers()
-    {
-        Assert.False(typeof(IFacade).IsAssignableFrom(typeof(ICommandFacade)));
-        Assert.False(typeof(IFacade).IsAssignableFrom(typeof(IQueryFacade)));
-        Assert.False(typeof(IFacade).IsAssignableFrom(typeof(CommandFacadeBase)));
-        Assert.False(typeof(IFacade).IsAssignableFrom(typeof(QueryFacadeBase)));
-    }
-
-    [Fact]
     public async Task AddDomium_registers_application_facades_from_application_assembly()
     {
         RenameHandler.Reset();
@@ -68,7 +27,7 @@ public sealed class FacadeTests
     }
 
     [Fact]
-    public async Task AddDomium_registers_application_facades_with_separate_command_and_query_bases()
+    public async Task DomiumFacade_base_dispatches_commands_and_queries_through_application_layer()
     {
         RenameHandler.Reset();
         var services = new ServiceCollection();
@@ -140,21 +99,23 @@ public sealed class FacadeTests
         Task<string> GetNameAsync(CancellationToken cancellationToken = default);
     }
 
-    public sealed class NameFacade(ICommandFacade commandFacade, IQueryFacade queryFacade) : INameFacade
+    public sealed class NameFacade(ICommandBus commandBus, IQueryBus queryBus)
+        : DomiumFacade(commandBus, queryBus), INameFacade
     {
         public Task RenameAsync(string name, CancellationToken cancellationToken = default)
         {
-            return commandFacade.ExecuteAsync(new RenameCommand(name), cancellationToken);
+            return ExecuteAsync(new RenameCommand(name), cancellationToken);
         }
 
         public async Task<string> GetNameAsync(CancellationToken cancellationToken = default)
         {
-            var result = await queryFacade.QueryAsync<GetNameQuery, NameResult>(new GetNameQuery(), cancellationToken);
+            var result = await QueryAsync<GetNameQuery, NameResult>(new GetNameQuery(), cancellationToken);
             return result.Value;
         }
     }
 
-    public sealed class NameCommandFacade(ICommandFacade facade) : CommandFacadeBase(facade), INameCommandFacade
+    public sealed class NameCommandFacade(ICommandBus commandBus, IQueryBus queryBus)
+        : DomiumFacade(commandBus, queryBus), INameCommandFacade
     {
         public Task RenameAsync(string name, CancellationToken cancellationToken = default)
         {
@@ -162,7 +123,8 @@ public sealed class FacadeTests
         }
     }
 
-    public sealed class NameQueryFacade(IQueryFacade facade) : QueryFacadeBase(facade), INameQueryFacade
+    public sealed class NameQueryFacade(ICommandBus commandBus, IQueryBus queryBus)
+        : DomiumFacade(commandBus, queryBus), INameQueryFacade
     {
         public async Task<string> GetNameAsync(CancellationToken cancellationToken = default)
         {
