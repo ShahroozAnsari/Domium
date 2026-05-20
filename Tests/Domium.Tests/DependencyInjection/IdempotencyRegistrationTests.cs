@@ -3,7 +3,6 @@ using Domium.Caching.Abstractions.Stores;
 using Domium.Configuration;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
-using StackExchange.Redis;
 
 namespace Domium.Tests.DependencyInjection;
 
@@ -81,6 +80,23 @@ public sealed class IdempotencyRegistrationTests
     }
 
     [Fact]
+    public async Task UseIdempotency_skips_non_idempotent_commands_by_default()
+    {
+        NonIdempotentCommandHandler.Reset();
+        var services = new ServiceCollection();
+
+        services.AddDomium(options => options.UseIdempotency());
+
+        await using var provider = services.BuildServiceProvider();
+        var commandBus = provider.GetRequiredService<ICommandBus>();
+
+        await commandBus.ExecuteAsync(new NonIdempotentCommand());
+        await commandBus.ExecuteAsync(new NonIdempotentCommand());
+
+        Assert.Equal(2, NonIdempotentCommandHandler.ExecutionCount);
+    }
+
+    [Fact]
     public void Redis_idempotency_uses_own_cache_store_configuration()
     {
         var services = new ServiceCollection();
@@ -116,18 +132,18 @@ public sealed class IdempotencyRegistrationTests
     }
 
     [Fact]
-    public void Redis_idempotency_accepts_connection_factory()
+    public void Redis_idempotency_uses_connection_factory_when_resolving_store()
     {
         var services = new ServiceCollection();
 
-        var exception = Record.Exception(() =>
-            services.AddDomium(options =>
-                options.UseIdempotency(idempotency =>
-                    idempotency.Store.UseRedis(provider =>
-                        provider.GetRequiredService<IConnectionMultiplexer>()))));
+        services.AddDomium(options =>
+            options.UseIdempotency(idempotency =>
+                idempotency.Store.UseRedis(_ => throw new TestConnectionFactoryException())));
 
-        Assert.Null(exception);
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumIdempotencyCacheStore));
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Throws<TestConnectionFactoryException>(
+            () => provider.GetRequiredService<IDomiumIdempotencyCacheStore>());
     }
 
     public sealed class CountingIdempotentCommand(string idempotencyKey) : IIdempotentCommand
@@ -188,11 +204,23 @@ public sealed class IdempotencyRegistrationTests
 
     public sealed class NonIdempotentCommandHandler : ICommandHandler<NonIdempotentCommand>
     {
+        public static int ExecutionCount { get; private set; }
+
+        public static void Reset()
+        {
+            ExecutionCount = 0;
+        }
+
         public Task HandleAsync(
             NonIdempotentCommand command,
             CancellationToken cancellationToken = default)
         {
+            ExecutionCount++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class TestConnectionFactoryException : Exception
+    {
     }
 }

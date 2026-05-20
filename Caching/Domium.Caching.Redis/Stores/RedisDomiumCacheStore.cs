@@ -194,7 +194,15 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
 
         if (stored)
         {
-            await AddIndexesAsync(key, metadata).ConfigureAwait(false);
+            try
+            {
+                await AddIndexesAsync(key, metadata).ConfigureAwait(false);
+            }
+            catch
+            {
+                await _database.KeyDeleteAsync(key).ConfigureAwait(false);
+                throw;
+            }
         }
 
         return stored;

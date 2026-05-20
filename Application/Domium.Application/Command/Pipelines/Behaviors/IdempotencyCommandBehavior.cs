@@ -65,25 +65,22 @@ public sealed class IdempotencyCommandBehavior<TCommand>(
         try
         {
             await next().ConfigureAwait(false);
-
-            var completedEntry = new DomiumIdempotencyEntry(
-                entry.Key,
-                entry.CommandName,
-                entry.CreatedAt,
-                entry.ExpiresAt,
-                DateTimeOffset.UtcNow);
-
-            await _cacheStore
-                .SetAsync(key, completedEntry, cacheOptions, metadata, cancellationToken)
-                .ConfigureAwait(false);
         }
         catch
         {
-            await _cacheStore
-                .RemoveAsync(key, cancellationToken)
-                .ConfigureAwait(false);
-
+            await _cacheStore.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
             throw;
         }
+
+        var completedEntry = new DomiumIdempotencyEntry(
+            entry.Key,
+            entry.CommandName,
+            entry.CreatedAt,
+            entry.ExpiresAt,
+            DateTimeOffset.UtcNow);
+
+        await _cacheStore
+            .SetAsync(key, completedEntry, cacheOptions, metadata, cancellationToken)
+            .ConfigureAwait(false);
     }
 }
