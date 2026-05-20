@@ -2,29 +2,20 @@ using System;
 
 namespace Domium.Idempotency.Abstractions.Models;
 
-public sealed class DomiumIdempotencyEntry
+public sealed class DomiumIdempotencyEntry(
+    string key,
+    string commandName,
+    DateTimeOffset createdAt,
+    DateTimeOffset expiresAt,
+    DateTimeOffset? completedAt = null)
 {
-    public DomiumIdempotencyEntry(
-        string key,
-        string commandName,
-        DateTimeOffset createdAt,
-        DateTimeOffset expiresAt,
-        DateTimeOffset? completedAt = null)
-    {
-        Key = key;
-        CommandName = commandName;
-        CreatedAt = createdAt;
-        ExpiresAt = expiresAt;
-        CompletedAt = completedAt;
-    }
+    public string Key { get; } = key;
 
-    public string Key { get; }
+    public string CommandName { get; } = commandName;
 
-    public string CommandName { get; }
+    public DateTimeOffset CreatedAt { get; } = createdAt;
 
-    public DateTimeOffset CreatedAt { get; }
+    public DateTimeOffset ExpiresAt { get; } = expiresAt;
 
-    public DateTimeOffset ExpiresAt { get; }
-
-    public DateTimeOffset? CompletedAt { get; }
+    public DateTimeOffset? CompletedAt { get; } = completedAt;
 }

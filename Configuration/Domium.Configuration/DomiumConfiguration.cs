@@ -542,16 +542,11 @@ public static class DomiumConfiguration
             : "<unknown>";
     }
 
-    private sealed class OwnedRedisDomiumCacheStore : IDomiumCacheStore, IDisposable
+    private sealed class OwnedRedisDomiumCacheStore(IConnectionMultiplexer connectionMultiplexer)
+        : IDomiumCacheStore, IDisposable
     {
-        private readonly IConnectionMultiplexer _connectionMultiplexer;
-        private readonly RedisDomiumCacheStore _inner;
-
-        public OwnedRedisDomiumCacheStore(IConnectionMultiplexer connectionMultiplexer)
-        {
-            _connectionMultiplexer = connectionMultiplexer ?? throw new ArgumentNullException(nameof(connectionMultiplexer));
-            _inner = new RedisDomiumCacheStore(connectionMultiplexer);
-        }
+        private readonly IConnectionMultiplexer _connectionMultiplexer = connectionMultiplexer ?? throw new ArgumentNullException(nameof(connectionMultiplexer));
+        private readonly RedisDomiumCacheStore _inner = new(connectionMultiplexer);
 
         public Task<Domium.Caching.Abstractions.Results.DomiumCacheResult<T>> TryGetAsync<T>(
             string key,
