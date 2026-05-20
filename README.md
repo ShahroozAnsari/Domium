@@ -29,10 +29,12 @@ Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It
 | `Domium.Persistence.Abstractions` | Provider-neutral aggregate repository and unit-of-work contracts. |
 | `Domium.Persistence.EntityFrameworkCore` | EF Core aggregate repository, DbContext base, unit of work, and EF-specific specifications. |
 | `Domium.Persistence.Dapper` | Dapper session, SQL executor, unit of work, and optional mapped aggregate repository. |
-| `Domium.Caching.Abstractions` | Cache store, policy, key, scope, and invalidation abstractions. |
-| `Domium.Caching` | Default cache policy, key, scope, and invalidation providers. |
+| `Domium.Caching.Abstractions` | Shared cache store, atomic write, policy, key, scope, and invalidation abstractions. |
+| `Domium.Caching` | Default cache policy, key, key factory, scope, and invalidation providers. |
 | `Domium.Caching.Memory` | In-memory cache store provider. |
 | `Domium.Caching.Redis` | Redis cache store provider. |
+| `Domium.Idempotency.Abstractions` | Idempotency key provider contracts and behavior options. |
+| `Domium.Idempotency` | Default idempotency key provider built on the shared cache key factory. |
 | `Domium.Eventing.Abstractions` | Internal and external event contracts. |
 | `Domium.Eventing` | In-process internal event publishing and default no-op external publisher. |
 | `Domium.Eventing.MassTransit` | MassTransit external event publishing and consumer adapter. |
@@ -78,6 +80,10 @@ services.AddDomium(options =>
         .UseValidation()
         .UseLogging()
         .UseTransactions()
+        .UseIdempotency(idempotency =>
+        {
+            idempotency.Expiration = TimeSpan.FromHours(24);
+        })
         .UseCaching(cache =>
         {
             cache.Provider = DomiumCacheProvider.Memory;
@@ -104,6 +110,7 @@ services.AddDomium(options =>
         .UseValidation()
         .UseLogging(false)
         .UseTransactions(false)
+        .UseIdempotency(enabled: false)
         .UseCaching(enabled: false);
 });
 ```
@@ -140,7 +147,9 @@ public sealed class OrderCreatedDomainEvent(OrderId orderId) : DomainEvent
 Commands change the domain model:
 
 ```csharp
-public sealed record CreateOrderCommand(string Number) : ICommand;
+public sealed record CreateOrderCommand(
+    string Number,
+    string IdempotencyKey) : IIdempotentCommand;
 
 public sealed class CreateOrderHandler(IRepository<Order, OrderId> repository)
     : ICommandHandler<CreateOrderCommand>
@@ -154,6 +163,8 @@ public sealed class CreateOrderHandler(IRepository<Order, OrderId> repository)
     }
 }
 ```
+
+Idempotent commands execute once for a command type and key. If a command fails, Domium removes the reservation so the same key can be retried.
 
 Queries return read models or DTOs:
 
@@ -180,7 +191,9 @@ public sealed class OrderFacade(ICommandBus commandBus, IQueryBus queryBus)
 {
     public Task CreateAsync(CreateOrderRequest request, CancellationToken cancellationToken = default)
     {
-        return ExecuteAsync(new CreateOrderCommand(request.Number), cancellationToken);
+        return ExecuteAsync(
+            new CreateOrderCommand(request.Number, request.IdempotencyKey),
+            cancellationToken);
     }
 
     public Task<OrderReadModel> GetAsync(Guid id, CancellationToken cancellationToken = default)
@@ -284,6 +297,8 @@ public sealed class OrderMapper : IDapperAggregateMapper<Order, OrderId>
 
 ## Query Caching
 
+Domium uses one shared cache store for query caching and command idempotency. `UseCaching(...)` enables the query caching behavior. `ConfigureCacheStore(...)` only configures the shared store, which is useful when idempotency needs Redis but query caching is disabled.
+
 Use in-memory caching:
 
 ```csharp
@@ -312,6 +327,50 @@ services.AddDomium(options =>
 ```
 
 Register query cache policies through `IDomiumQueryCachePolicyRegistry`.
+
+## Command Idempotency
+
+Command idempotency uses the same `IDomiumCacheStore` as query caching. The store supports atomic `TrySetAsync(...)`, so duplicate commands cannot both reserve the same idempotency key.
+
+Use the default in-memory cache store for single-node applications or tests:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Use Redis as the shared store for multiple application instances:
+
+```csharp
+services.AddDomium(options =>
+{
+    options
+        .ConfigureCacheStore(cache =>
+        {
+            cache.Provider = DomiumCacheProvider.Redis;
+            cache.RedisConnectionString = "localhost";
+        })
+        .UseIdempotency(idempotency =>
+        {
+            idempotency.Expiration = TimeSpan.FromHours(24);
+        });
+});
+```
+
+Commands opt in by implementing `IIdempotentCommand`:
+
+```csharp
+public sealed record SubmitOrderCommand(
+    Guid OrderId,
+    string IdempotencyKey) : IIdempotentCommand;
+```
+
+Set `RequireIdempotencyKey = true` when every command in the application should be idempotent.
 
 ## Tenancy
 

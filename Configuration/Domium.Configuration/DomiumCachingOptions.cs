@@ -2,9 +2,7 @@ namespace Domium.Configuration;
 
 public sealed class DomiumCachingOptions
 {
-    public DomiumCacheProvider Provider { get; set; } = DomiumCacheProvider.Memory;
+    public DomiumCacheStoreOptions Store { get; } = new();
 
     public TimeSpan DefaultExpiration { get; set; } = TimeSpan.FromMinutes(5);
-
-    public string RedisConnectionString { get; set; } = "localhost";
 }

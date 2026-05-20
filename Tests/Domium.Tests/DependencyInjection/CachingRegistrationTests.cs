@@ -198,6 +198,17 @@ public sealed class CachingRegistrationTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> TrySetAsync<T>(
+            string key,
+            T value,
+            DomiumCacheEntryOptions options,
+            DomiumCacheInvalidationMetadata invalidationMetadata,
+            CancellationToken cancellationToken)
+        {
+            EntryOptions = options;
+            return Task.FromResult(true);
+        }
+
         public Task RemoveAsync(string key, CancellationToken cancellationToken)
         {
             return Task.CompletedTask;

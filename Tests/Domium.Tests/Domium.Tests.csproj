@@ -38,6 +38,8 @@
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.MassTransit\Domium.Eventing.MassTransit.csproj" />
     <ProjectReference Include="..\..\Facade\Domium.Facade.Abstractions\Domium.Facade.Abstractions.csproj" />
     <ProjectReference Include="..\..\Facade\Domium.Facade\Domium.Facade.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Domium.Idempotency.Abstractions\Domium.Idempotency.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Domium.Idempotency\Domium.Idempotency.csproj" />
   </ItemGroup>
 
 </Project>

@@ -157,22 +157,7 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
         }
 
         var metadata = invalidationMetadata ?? new DomiumCacheInvalidationMetadata(null, null, null);
-
-        var now = DateTimeOffset.UtcNow;
-        var absoluteExpiresAtUtc = options?.AbsoluteExpirationRelativeToNow.HasValue == true
-            ? now.Add(options.AbsoluteExpirationRelativeToNow.Value)
-            : (DateTimeOffset?)null;
-
-        var envelope = new RedisDomiumCacheEnvelope<T>
-        {
-            HasValue = true,
-            Value = value,
-            Metadata = metadata,
-            AbsoluteExpiresAtUtc = absoluteExpiresAtUtc,
-            SlidingExpiration = options?.SlidingExpiration
-        };
-
-        var payload = JsonSerializer.Serialize(envelope, SerializerOptions);
+        var payload = CreatePayload(value, options, metadata);
         var ttl = GetInitialTtl(options);
 
         await _database.StringSetAsync(
@@ -181,6 +166,38 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
             expiry: ttl.HasValue ? (Expiration)ttl.Value : default).ConfigureAwait(false);
 
         await AddIndexesAsync(key, metadata).ConfigureAwait(false);
+    }
+
+    public async Task<bool> TrySetAsync<T>(
+        string key,
+        T value,
+        DomiumCacheEntryOptions options,
+        DomiumCacheInvalidationMetadata invalidationMetadata,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new ArgumentException("Cache key cannot be null or empty.", nameof(key));
+        }
+
+        var metadata = invalidationMetadata ?? new DomiumCacheInvalidationMetadata(null, null, null);
+        var payload = CreatePayload(value, options, metadata);
+        var ttl = GetInitialTtl(options);
+
+        var stored = await _database.StringSetAsync(
+            key,
+            payload,
+            expiry: ttl.HasValue ? (Expiration)ttl.Value : default,
+            when: When.NotExists).ConfigureAwait(false);
+
+        if (stored)
+        {
+            await AddIndexesAsync(key, metadata).ConfigureAwait(false);
+        }
+
+        return stored;
     }
 
     /// <summary>
@@ -363,6 +380,28 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
         }
 
         return options.AbsoluteExpirationRelativeToNow ?? options.SlidingExpiration;
+    }
+
+    private static string CreatePayload<T>(
+        T value,
+        DomiumCacheEntryOptions? options,
+        DomiumCacheInvalidationMetadata metadata)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var absoluteExpiresAtUtc = options?.AbsoluteExpirationRelativeToNow.HasValue == true
+            ? now.Add(options.AbsoluteExpirationRelativeToNow.Value)
+            : (DateTimeOffset?)null;
+
+        var envelope = new RedisDomiumCacheEnvelope<T>
+        {
+            HasValue = true,
+            Value = value,
+            Metadata = metadata,
+            AbsoluteExpiresAtUtc = absoluteExpiresAtUtc,
+            SlidingExpiration = options?.SlidingExpiration
+        };
+
+        return JsonSerializer.Serialize(envelope, SerializerOptions);
     }
 
     private async Task<DomiumCacheInvalidationMetadata?> GetMetadataAsync(string key)

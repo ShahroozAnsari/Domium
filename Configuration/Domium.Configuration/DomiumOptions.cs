@@ -17,7 +17,11 @@ public sealed class DomiumOptions
 
     public bool CachingEnabled { get; private set; }
 
+    public bool IdempotencyEnabled { get; private set; }
+
     public DomiumCachingOptions CachingOptions { get; } = new();
+
+    public DomiumIdempotencyOptions IdempotencyOptions { get; } = new();
 
     public IReadOnlyCollection<Assembly> ApplicationAssemblies => _applicationAssemblies.AsReadOnly();
 
@@ -55,6 +59,18 @@ public sealed class DomiumOptions
         if (enabled)
         {
             configure?.Invoke(CachingOptions);
+        }
+
+        return this;
+    }
+
+    public DomiumOptions UseIdempotency(Action<DomiumIdempotencyOptions>? configure = null, bool enabled = true)
+    {
+        IdempotencyEnabled = enabled;
+
+        if (enabled)
+        {
+            configure?.Invoke(IdempotencyOptions);
         }
 
         return this;

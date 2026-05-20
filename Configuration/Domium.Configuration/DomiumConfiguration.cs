@@ -14,17 +14,24 @@ using Domium.Caching.Abstractions.Providers;
 using Domium.Caching.Abstractions.Stores;
 using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
-using Domium.Caching.Redis;
+using Domium.Caching.Redis.Stores;
+using Domium.Caching.Stores;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
 using Domium.Facade.Abstractions;
+using Domium.Idempotency;
+using Domium.Idempotency.Abstractions.Models;
+using Domium.Idempotency.Abstractions.Providers;
+using Domium.Idempotency.Providers;
 using Domium.Persistence.Abstractions;
 using Domium.Tenancy;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Scrutor;
+using StackExchange.Redis;
 
 namespace Domium.Configuration;
 
@@ -185,6 +192,8 @@ public static class DomiumConfiguration
                name == "Domium.Eventing.MassTransit" ||
                name == "Domium.Facade" ||
                name == "Domium.Facade.Abstractions" ||
+               name == "Domium.Idempotency" ||
+               name == "Domium.Idempotency.Abstractions" ||
                name == "Domium.Observability" ||
                name == "Domium.Observability.OpenTelemetry" ||
                name == "Domium.Tenancy" ||
@@ -220,6 +229,12 @@ public static class DomiumConfiguration
                     typeof(LoggingQueryBehavior<,>)));
         }
 
+        if (options.IdempotencyEnabled)
+        {
+            RegisterIdempotencyCacheStore(services, options.IdempotencyOptions.Store);
+            RegisterIdempotency(services, options.IdempotencyOptions);
+        }
+
         if (options.TransactionsEnabled)
         {
             ValidateTransactionRegistration(services);
@@ -232,29 +247,33 @@ public static class DomiumConfiguration
 
         if (options.CachingEnabled)
         {
+            RegisterQueryCacheStore(services, options.CachingOptions.Store);
             RegisterCaching(services, options.CachingOptions);
         }
     }
 
+    private static void RegisterIdempotency(IServiceCollection services, DomiumIdempotencyOptions options)
+    {
+        ValidateIdempotencyOptions(options);
+
+        services.TryAddSingleton(
+            new DomiumIdempotencyBehaviorOptions
+            {
+                Expiration = options.Expiration,
+                KeyPrefix = options.KeyPrefix,
+                RequireIdempotencyKey = options.RequireIdempotencyKey
+            });
+
+        services.TryAddSingleton<IDomiumIdempotencyKeyProvider, DefaultDomiumIdempotencyKeyProvider>();
+
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped(
+                typeof(ICommandPipelineBehavior<>),
+                typeof(IdempotencyCommandBehavior<>)));
+    }
+
     private static void RegisterCaching(IServiceCollection services, DomiumCachingOptions options)
     {
-        ValidateCachingOptions(options);
-
-        services.TryAddSingleton(options);
-
-        if (options.Provider == DomiumCacheProvider.Memory)
-        {
-            services.AddMemoryCache();
-
-            services.TryAddSingleton<IDomiumCacheStore, MemoryDomiumCacheStore>();
-        }
-
-        if (options.Provider == DomiumCacheProvider.Redis)
-        {
-            services.AddDomiumRedisCacheStore(options.RedisConnectionString);
-        }
-
-        services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
         services.TryAddSingleton<DomiumQueryCachePolicyProvider>();
         services.TryAddSingleton<IDomiumQueryCachePolicyProvider>(
             provider => provider.GetRequiredService<DomiumQueryCachePolicyProvider>());
@@ -271,6 +290,27 @@ public static class DomiumConfiguration
                 typeof(CachingQueryBehavior<,>)));
     }
 
+    private static void RegisterQueryCacheStore(IServiceCollection services, DomiumCacheStoreOptions options)
+    {
+        ValidateCacheStoreOptions(options, "Query caching");
+
+        services.AddMemoryCache();
+        services.TryAddSingleton<IDomiumCacheKeyFactory, DefaultDomiumCacheKeyFactory>();
+        services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
+        services.TryAddSingleton<IDomiumQueryCacheStore>(
+            provider => new DomiumQueryCacheStore(CreateCacheStore(provider, options)));
+    }
+
+    private static void RegisterIdempotencyCacheStore(IServiceCollection services, DomiumCacheStoreOptions options)
+    {
+        ValidateCacheStoreOptions(options, "Idempotency");
+
+        services.AddMemoryCache();
+        services.TryAddSingleton<IDomiumCacheKeyFactory, DefaultDomiumCacheKeyFactory>();
+        services.TryAddSingleton<IDomiumIdempotencyCacheStore>(
+            provider => new DomiumIdempotencyCacheStore(CreateCacheStore(provider, options)));
+    }
+
     private static void ValidateCachingOptions(DomiumCachingOptions options)
     {
         if (options == null) throw new ArgumentNullException(nameof(options));
@@ -282,12 +322,62 @@ public static class DomiumConfiguration
                 "Default cache expiration must be greater than zero.");
         }
 
+        ValidateCacheStoreOptions(options.Store, "Query caching");
+    }
+
+    private static void ValidateCacheStoreOptions(
+        DomiumCacheStoreOptions options,
+        string featureName)
+    {
+        if (options == null) throw new ArgumentNullException(nameof(options));
+
         if (options.Provider == DomiumCacheProvider.Redis &&
+            options.RedisConnectionFactory == null &&
             string.IsNullOrWhiteSpace(options.RedisConnectionString))
         {
             throw new InvalidOperationException(
-                "Redis caching requires a non-empty Redis connection string.");
+                $"{featureName} Redis store requires a non-empty Redis connection string or Redis connection factory.");
         }
+    }
+
+    private static void ValidateIdempotencyOptions(DomiumIdempotencyOptions options)
+    {
+        if (options == null) throw new ArgumentNullException(nameof(options));
+
+        if (options.Expiration <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.Expiration),
+                "Idempotency expiration must be greater than zero.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.KeyPrefix))
+        {
+            throw new InvalidOperationException("Idempotency key prefix cannot be empty.");
+        }
+
+        ValidateCacheStoreOptions(options.Store, "Idempotency");
+    }
+
+    private static IDomiumCacheStore CreateCacheStore(
+        IServiceProvider provider,
+        DomiumCacheStoreOptions options)
+    {
+        if (options.Provider == DomiumCacheProvider.Memory)
+        {
+            return new MemoryDomiumCacheStore(provider.GetRequiredService<IMemoryCache>());
+        }
+
+        if (options.Provider == DomiumCacheProvider.Redis)
+        {
+            var connectionMultiplexer = options.RedisConnectionFactory != null
+                ? options.RedisConnectionFactory(provider)
+                : ConnectionMultiplexer.Connect(options.RedisConnectionString);
+
+            return new RedisDomiumCacheStore(connectionMultiplexer);
+        }
+
+        throw new InvalidOperationException($"Unsupported cache provider '{options.Provider}'.");
     }
 
     private static void ValidateTransactionRegistration(IServiceCollection services)
