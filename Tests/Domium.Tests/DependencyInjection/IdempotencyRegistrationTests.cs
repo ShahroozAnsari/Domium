@@ -81,41 +81,53 @@ public sealed class IdempotencyRegistrationTests
     }
 
     [Fact]
-    public void Redis_idempotency_uses_shared_cache_store_configuration()
+    public void Redis_idempotency_uses_own_cache_store_configuration()
     {
         var services = new ServiceCollection();
 
         var exception = Record.Exception(() =>
             services.AddDomium(options =>
                 options
-                    .ConfigureCacheStore(cache =>
+                    .UseIdempotency(idempotency =>
                     {
-                        cache.Provider = DomiumCacheProvider.Redis;
-                        cache.RedisConnectionString = "localhost";
-                    })
-                    .UseIdempotency()));
+                        idempotency.Store.Provider = DomiumCacheProvider.Redis;
+                        idempotency.Store.RedisConnectionString = "localhost";
+                    })));
 
         Assert.Null(exception);
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCacheStore));
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IConnectionMultiplexer));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumIdempotencyCacheStore));
     }
 
     [Fact]
-    public void Redis_cache_store_configuration_requires_connection_string_for_idempotency()
+    public void Redis_idempotency_store_configuration_requires_connection_string()
     {
         var services = new ServiceCollection();
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             services.AddDomium(options =>
                 options
-                    .ConfigureCacheStore(cache =>
+                    .UseIdempotency(idempotency =>
                     {
-                        cache.Provider = DomiumCacheProvider.Redis;
-                        cache.RedisConnectionString = string.Empty;
-                    })
-                    .UseIdempotency()));
+                        idempotency.Store.Provider = DomiumCacheProvider.Redis;
+                        idempotency.Store.RedisConnectionString = string.Empty;
+                    })));
 
-        Assert.Contains("Redis caching requires a non-empty Redis connection string", exception.Message);
+        Assert.Contains("Idempotency Redis store requires a non-empty Redis connection string", exception.Message);
+    }
+
+    [Fact]
+    public void Redis_idempotency_accepts_connection_factory()
+    {
+        var services = new ServiceCollection();
+
+        var exception = Record.Exception(() =>
+            services.AddDomium(options =>
+                options.UseIdempotency(idempotency =>
+                    idempotency.Store.UseRedis(provider =>
+                        provider.GetRequiredService<IConnectionMultiplexer>()))));
+
+        Assert.Null(exception);
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumIdempotencyCacheStore));
     }
 
     public sealed class CountingIdempotentCommand(string idempotencyKey) : IIdempotentCommand

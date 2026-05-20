@@ -82,11 +82,12 @@ services.AddDomium(options =>
         .UseTransactions()
         .UseIdempotency(idempotency =>
         {
+            idempotency.Store.UseMemory();
             idempotency.Expiration = TimeSpan.FromHours(24);
         })
         .UseCaching(cache =>
         {
-            cache.Provider = DomiumCacheProvider.Memory;
+            cache.Store.UseMemory();
             cache.DefaultExpiration = TimeSpan.FromMinutes(5);
         });
 });
@@ -297,7 +298,7 @@ public sealed class OrderMapper : IDapperAggregateMapper<Order, OrderId>
 
 ## Query Caching
 
-Domium uses one shared cache store for query caching and command idempotency. `UseCaching(...)` enables the query caching behavior. `ConfigureCacheStore(...)` only configures the shared store, which is useful when idempotency needs Redis but query caching is disabled.
+Domium uses one cache store abstraction for query caching and command idempotency. Each feature owns its own store options, so query caching and idempotency can use different Redis connections while sharing the same memory and Redis store implementations.
 
 Use in-memory caching:
 
@@ -306,7 +307,7 @@ services.AddDomium(options =>
 {
     options.UseCaching(cache =>
     {
-        cache.Provider = DomiumCacheProvider.Memory;
+        cache.Store.UseMemory();
         cache.DefaultExpiration = TimeSpan.FromMinutes(5);
     });
 });
@@ -319,8 +320,7 @@ services.AddDomium(options =>
 {
     options.UseCaching(cache =>
     {
-        cache.Provider = DomiumCacheProvider.Redis;
-        cache.RedisConnectionString = "localhost";
+        cache.Store.UseRedis("localhost");
         cache.DefaultExpiration = TimeSpan.FromMinutes(5);
     });
 });
@@ -330,7 +330,7 @@ Register query cache policies through `IDomiumQueryCachePolicyRegistry`.
 
 ## Command Idempotency
 
-Command idempotency uses the same `IDomiumCacheStore` as query caching. The store supports atomic `TrySetAsync(...)`, so duplicate commands cannot both reserve the same idempotency key.
+Command idempotency uses the same cache store implementations as query caching through an idempotency-specific store registration. The store supports atomic `TrySetAsync(...)`, so duplicate commands cannot both reserve the same idempotency key.
 
 Use the default in-memory cache store for single-node applications or tests:
 
@@ -339,26 +339,54 @@ services.AddDomium(options =>
 {
     options.UseIdempotency(idempotency =>
     {
+        idempotency.Store.UseMemory();
         idempotency.Expiration = TimeSpan.FromHours(24);
     });
 });
 ```
 
-Use Redis as the shared store for multiple application instances:
+Use Redis for multiple application instances:
 
 ```csharp
 services.AddDomium(options =>
 {
-    options
-        .ConfigureCacheStore(cache =>
-        {
-            cache.Provider = DomiumCacheProvider.Redis;
-            cache.RedisConnectionString = "localhost";
-        })
-        .UseIdempotency(idempotency =>
-        {
-            idempotency.Expiration = TimeSpan.FromHours(24);
-        });
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis("localhost");
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Query caching and idempotency can use different Redis connections:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseCaching(cache =>
+    {
+        cache.Store.UseRedis(queryCacheRedis);
+        cache.DefaultExpiration = TimeSpan.FromMinutes(5);
+    });
+
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis(idempotencyRedis);
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Advanced applications can provide their own Redis connection factory:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis(provider =>
+            provider.GetRequiredService<IConnectionMultiplexer>());
+    });
 });
 ```
 

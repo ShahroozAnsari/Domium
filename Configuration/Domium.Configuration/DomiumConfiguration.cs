@@ -370,11 +370,13 @@ public static class DomiumConfiguration
 
         if (options.Provider == DomiumCacheProvider.Redis)
         {
-            var connectionMultiplexer = options.RedisConnectionFactory != null
-                ? options.RedisConnectionFactory(provider)
-                : ConnectionMultiplexer.Connect(options.RedisConnectionString);
+            if (options.RedisConnectionFactory != null)
+            {
+                return new RedisDomiumCacheStore(options.RedisConnectionFactory(provider));
+            }
 
-            return new RedisDomiumCacheStore(connectionMultiplexer);
+            return new OwnedRedisDomiumCacheStore(
+                ConnectionMultiplexer.Connect(options.RedisConnectionString));
         }
 
         throw new InvalidOperationException($"Unsupported cache provider '{options.Provider}'.");
@@ -538,5 +540,77 @@ public static class DomiumConfiguration
         return descriptor.ImplementationFactory is not null
             ? "<factory>"
             : "<unknown>";
+    }
+
+    private sealed class OwnedRedisDomiumCacheStore : IDomiumCacheStore, IDisposable
+    {
+        private readonly IConnectionMultiplexer _connectionMultiplexer;
+        private readonly RedisDomiumCacheStore _inner;
+
+        public OwnedRedisDomiumCacheStore(IConnectionMultiplexer connectionMultiplexer)
+        {
+            _connectionMultiplexer = connectionMultiplexer ?? throw new ArgumentNullException(nameof(connectionMultiplexer));
+            _inner = new RedisDomiumCacheStore(connectionMultiplexer);
+        }
+
+        public Task<Domium.Caching.Abstractions.Results.DomiumCacheResult<T>> TryGetAsync<T>(
+            string key,
+            CancellationToken cancellationToken)
+        {
+            return _inner.TryGetAsync<T>(key, cancellationToken);
+        }
+
+        public Task SetAsync<T>(
+            string key,
+            T value,
+            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
+            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
+            CancellationToken cancellationToken)
+        {
+            return _inner.SetAsync(key, value, options, invalidationMetadata, cancellationToken);
+        }
+
+        public Task<bool> TrySetAsync<T>(
+            string key,
+            T value,
+            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
+            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
+            CancellationToken cancellationToken)
+        {
+            return _inner.TrySetAsync(key, value, options, invalidationMetadata, cancellationToken);
+        }
+
+        public Task RemoveAsync(
+            string key,
+            CancellationToken cancellationToken)
+        {
+            return _inner.RemoveAsync(key, cancellationToken);
+        }
+
+        public Task RemoveByTagAsync(
+            string tag,
+            CancellationToken cancellationToken)
+        {
+            return _inner.RemoveByTagAsync(tag, cancellationToken);
+        }
+
+        public Task RemoveByEntityKeyAsync(
+            string entityKey,
+            CancellationToken cancellationToken)
+        {
+            return _inner.RemoveByEntityKeyAsync(entityKey, cancellationToken);
+        }
+
+        public Task RemoveByGroupAsync(
+            string group,
+            CancellationToken cancellationToken)
+        {
+            return _inner.RemoveByGroupAsync(group, cancellationToken);
+        }
+
+        public void Dispose()
+        {
+            _connectionMultiplexer.Dispose();
+        }
     }
 }

@@ -8,7 +8,6 @@ using Domium.Caching.Providers;
 using Domium.Configuration;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
-using StackExchange.Redis;
 
 namespace Domium.Tests.DependencyInjection;
 
@@ -40,7 +39,7 @@ public sealed class CachingRegistrationTests
         var cacheStore = new CapturingCacheStore();
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumCacheStore>(cacheStore);
+        services.AddSingleton<IDomiumQueryCacheStore>(cacheStore);
         services.AddDomium(options => options.UseCaching());
 
         await using var provider = services.BuildServiceProvider();
@@ -64,7 +63,7 @@ public sealed class CachingRegistrationTests
         var cacheStore = new CapturingCacheStore();
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumCacheStore>(cacheStore);
+        services.AddSingleton<IDomiumQueryCacheStore>(cacheStore);
         services.AddDomium(options =>
             options.UseCaching(cacheOptions =>
                 cacheOptions.DefaultExpiration = TimeSpan.FromMinutes(7)));
@@ -104,13 +103,12 @@ public sealed class CachingRegistrationTests
             services.AddDomium(options =>
                 options.UseCaching(cacheOptions =>
                 {
-                    cacheOptions.Provider = DomiumCacheProvider.Redis;
-                    cacheOptions.RedisConnectionString = "localhost";
+                    cacheOptions.Store.Provider = DomiumCacheProvider.Redis;
+                    cacheOptions.Store.RedisConnectionString = "localhost";
                 })));
 
         Assert.Null(exception);
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCacheStore));
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IConnectionMultiplexer));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumQueryCacheStore));
     }
 
     [Fact]
@@ -122,11 +120,11 @@ public sealed class CachingRegistrationTests
             services.AddDomium(options =>
                 options.UseCaching(cacheOptions =>
                 {
-                    cacheOptions.Provider = DomiumCacheProvider.Redis;
-                    cacheOptions.RedisConnectionString = string.Empty;
+                    cacheOptions.Store.Provider = DomiumCacheProvider.Redis;
+                    cacheOptions.Store.RedisConnectionString = string.Empty;
                 })));
 
-        Assert.Contains("Redis caching requires a non-empty Redis connection string", exception.Message);
+        Assert.Contains("Query caching Redis store requires a non-empty Redis connection string", exception.Message);
     }
 
     private static void RegisterPolicy(
@@ -176,7 +174,7 @@ public sealed class CachingRegistrationTests
         }
     }
 
-    private sealed class CapturingCacheStore : IDomiumCacheStore
+    private sealed class CapturingCacheStore : IDomiumQueryCacheStore
     {
         public DomiumCacheEntryOptions? EntryOptions { get; private set; }
 
