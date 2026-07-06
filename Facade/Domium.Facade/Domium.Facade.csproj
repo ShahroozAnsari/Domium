@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Description>Facade implementation for Domium application command and query boundaries.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\Domium.Facade.Abstractions\Domium.Facade.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

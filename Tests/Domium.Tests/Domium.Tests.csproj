@@ -8,13 +8,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="10.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Configuration\Domium.Configuration\Domium.Configuration.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching\Domium.Caching.csproj" />
     <ProjectReference Include="..\..\Extensions\Domium.Extensions.DependencyInjection\Domium.Extensions.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
@@ -35,6 +42,10 @@
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing\Domium.Eventing.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.MassTransit\Domium.Eventing.MassTransit.csproj" />
+    <ProjectReference Include="..\..\Facade\Domium.Facade.Abstractions\Domium.Facade.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Facade\Domium.Facade\Domium.Facade.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Domium.Idempotency.Abstractions\Domium.Idempotency.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Domium.Idempotency\Domium.Idempotency.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Description>Default idempotency key provider for Domium command pipelines.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\Domium.Idempotency.Abstractions\Domium.Idempotency.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

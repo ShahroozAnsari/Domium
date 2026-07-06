@@ -58,6 +58,37 @@ public interface IDomiumCacheStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Atomically stores a value only when the key does not already exist.
+    /// </summary>
+    /// <typeparam name="T">
+    /// The cached value type.
+    /// </typeparam>
+    /// <param name="key">
+    /// The cache key.
+    /// </param>
+    /// <param name="value">
+    /// The value to cache.
+    /// </param>
+    /// <param name="options">
+    /// Expiration options for the cache entry.
+    /// </param>
+    /// <param name="invalidationMetadata">
+    /// Metadata used to support cache invalidation.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// A cancellation token that can cancel the operation.
+    /// </param>
+    /// <returns>
+    /// True when the value was stored; false when the key already exists.
+    /// </returns>
+    Task<bool> TrySetAsync<T>(
+        string key,
+        T value,
+        DomiumCacheEntryOptions options,
+        DomiumCacheInvalidationMetadata invalidationMetadata,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Removes a cache entry by key.
     /// </summary>
     /// <param name="key">

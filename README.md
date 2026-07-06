@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/social-preview.png" alt="Domium social preview" width="860" />
+</p>
+
 # Domium
 
 Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It gives you focused building blocks for aggregate modeling, command and query pipelines, provider-selectable persistence, tenant-aware caching, eventing, and observability without forcing one infrastructure style on every application.
@@ -6,6 +10,7 @@ Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It
 
 - Model domain objects with aggregate roots, strongly typed IDs, value objects, audit metadata, soft delete support, and domain events.
 - Use a small CQRS application layer with command/query buses, validation, logging, transactions, and query caching behaviors.
+- Protect command handlers with optional idempotency based on atomic cache reservations.
 - Choose persistence per application: EF Core, Dapper, or both.
 - Keep read models independent from aggregate repositories.
 - Add provider packages only when needed: Redis, MassTransit, OpenTelemetry, EF Core, Dapper.
@@ -17,15 +22,20 @@ Domium is a lightweight DDD and CQRS foundation for modern .NET applications. It
 | --- | --- |
 | `Domium.Domain.Abstractions` | Domain contracts for entities, aggregate roots, IDs, value objects, and domain events. |
 | `Domium.Domain` | Concrete domain primitives such as `AggregateRoot<TId>`, `EntityBase<TId>`, `AggregateId<T>`, and `DomainEvent`. |
+| `Domium.Configuration` | Core composition options and registration pipeline used by `AddDomium`. |
 | `Domium.Application.Abstractions` | Command/query buses, handlers, validators, and pipeline contracts. |
 | `Domium.Application` | Command/query buses, pipeline behaviors, and domain event dispatching. |
+| `Domium.Facade.Abstractions` | Facade marker contract for exposing one module-level API to other layers. |
+| `Domium.Facade` | Base facade helper that delegates to command and query buses while keeping CQRS inside the application layer. |
 | `Domium.Persistence.Abstractions` | Provider-neutral aggregate repository and unit-of-work contracts. |
 | `Domium.Persistence.EntityFrameworkCore` | EF Core aggregate repository, DbContext base, unit of work, and EF-specific specifications. |
 | `Domium.Persistence.Dapper` | Dapper session, SQL executor, unit of work, and optional mapped aggregate repository. |
-| `Domium.Caching.Abstractions` | Cache store, policy, key, scope, and invalidation abstractions. |
-| `Domium.Caching` | Default cache policy, key, scope, and invalidation providers. |
+| `Domium.Caching.Abstractions` | Shared cache store, atomic write, policy, key, scope, and invalidation abstractions. |
+| `Domium.Caching` | Default cache policy, key, key factory, scope, and invalidation providers. |
 | `Domium.Caching.Memory` | In-memory cache store provider. |
 | `Domium.Caching.Redis` | Redis cache store provider. |
+| `Domium.Idempotency.Abstractions` | Idempotency key provider contracts and behavior options. |
+| `Domium.Idempotency` | Default idempotency key provider built on the shared cache key factory. |
 | `Domium.Eventing.Abstractions` | Internal and external event contracts. |
 | `Domium.Eventing` | In-process internal event publishing and default no-op external publisher. |
 | `Domium.Eventing.MassTransit` | MassTransit external event publishing and consumer adapter. |
@@ -42,6 +52,8 @@ Install the packages you need. A typical application starts with:
 ```powershell
 dotnet add package Domium.Domain
 dotnet add package Domium.Application
+dotnet add package Domium.Configuration
+dotnet add package Domium.Facade
 dotnet add package Domium.Extensions.DependencyInjection
 ```
 
@@ -60,26 +72,48 @@ dotnet add package Domium.Observability.OpenTelemetry
 Register Domium with the fluent API:
 
 ```csharp
+using Domium.Configuration;
+using Domium.Extensions.DependencyInjection;
+
 services.AddDomium(options =>
 {
     options
         .UseValidation()
         .UseLogging()
         .UseTransactions()
+        .UseIdempotency(idempotency =>
+        {
+            idempotency.Store.UseMemory();
+            idempotency.Expiration = TimeSpan.FromHours(24);
+        })
         .UseCaching(cache =>
         {
-            cache.Provider = DomiumCacheProvider.Memory;
+            cache.Store.UseMemory();
             cache.DefaultExpiration = TimeSpan.FromMinutes(5);
         });
 });
 ```
 
-When handlers live outside the assembly that calls `AddDomium`, register those assemblies explicitly:
+`AddDomium` scans loaded non-framework application assemblies by default, so most applications do not need to pass an assembly manually. When handlers live in an assembly that is not loaded yet, register it explicitly:
 
 ```csharp
 services.AddDomium(options =>
 {
     options.AddApplicationAssembly(typeof(CreateOrderHandler).Assembly);
+});
+```
+
+Feature toggles accept explicit booleans:
+
+```csharp
+services.AddDomium(options =>
+{
+    options
+        .UseValidation()
+        .UseLogging(false)
+        .UseTransactions(false)
+        .UseIdempotency(enabled: false)
+        .UseCaching(enabled: false);
 });
 ```
 
@@ -115,7 +149,9 @@ public sealed class OrderCreatedDomainEvent(OrderId orderId) : DomainEvent
 Commands change the domain model:
 
 ```csharp
-public sealed record CreateOrderCommand(string Number) : ICommand;
+public sealed record CreateOrderCommand(
+    string Number,
+    string IdempotencyKey) : IIdempotentCommand;
 
 public sealed class CreateOrderHandler(IRepository<Order, OrderId> repository)
     : ICommandHandler<CreateOrderCommand>
@@ -130,12 +166,43 @@ public sealed class CreateOrderHandler(IRepository<Order, OrderId> repository)
 }
 ```
 
+Idempotent commands execute once for a command type and key. If a command fails, Domium removes the reservation so the same key can be retried.
+
 Queries return read models or DTOs:
 
 ```csharp
 public sealed record GetOrderQuery(Guid Id) : IQuery<OrderReadModel>;
 
 public sealed record OrderReadModel(Guid Id, string Number);
+```
+
+## Facades
+
+Facades provide one module-level dependency to other layers while CQRS stays enforced in the application layer.
+
+```csharp
+public interface IOrderFacade : IFacade
+{
+    Task CreateAsync(CreateOrderRequest request, CancellationToken cancellationToken = default);
+
+    Task<OrderReadModel> GetAsync(Guid id, CancellationToken cancellationToken = default);
+}
+
+public sealed class OrderFacade(ICommandBus commandBus, IQueryBus queryBus)
+    : DomiumFacade(commandBus, queryBus), IOrderFacade
+{
+    public Task CreateAsync(CreateOrderRequest request, CancellationToken cancellationToken = default)
+    {
+        return ExecuteAsync(
+            new CreateOrderCommand(request.Number, request.IdempotencyKey),
+            cancellationToken);
+    }
+
+    public Task<OrderReadModel> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return QueryAsync<GetOrderQuery, OrderReadModel>(new GetOrderQuery(id), cancellationToken);
+    }
+}
 ```
 
 ## Persistence
@@ -232,6 +299,8 @@ public sealed class OrderMapper : IDapperAggregateMapper<Order, OrderId>
 
 ## Query Caching
 
+Domium uses one cache store abstraction for query caching and command idempotency. Each feature owns its own store options, so query caching and idempotency can use different Redis connections while sharing the same memory and Redis store implementations.
+
 Use in-memory caching:
 
 ```csharp
@@ -239,7 +308,7 @@ services.AddDomium(options =>
 {
     options.UseCaching(cache =>
     {
-        cache.Provider = DomiumCacheProvider.Memory;
+        cache.Store.UseMemory();
         cache.DefaultExpiration = TimeSpan.FromMinutes(5);
     });
 });
@@ -248,19 +317,100 @@ services.AddDomium(options =>
 Use Redis caching:
 
 ```csharp
-services.AddDomiumRedisCacheStore("localhost");
-
 services.AddDomium(options =>
 {
     options.UseCaching(cache =>
     {
-        cache.Provider = DomiumCacheProvider.Redis;
+        cache.Store.UseRedis("localhost");
         cache.DefaultExpiration = TimeSpan.FromMinutes(5);
     });
 });
 ```
 
 Register query cache policies through `IDomiumQueryCachePolicyRegistry`.
+
+Cache keys are generated by `IDomiumCacheKeyFactory`. Query caching uses the `query` category and includes the query type, scope, and a hash of the query payload. Custom cache stores must implement atomic `TrySetAsync(...)` as well as normal get/set/remove operations because command idempotency depends on atomic reservation.
+
+## Command Idempotency
+
+Command idempotency uses the same cache store implementations as query caching through an idempotency-specific store registration. The store supports atomic `TrySetAsync(...)`, so duplicate commands cannot both reserve the same idempotency key.
+
+Use the default in-memory cache store for single-node applications or tests:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseMemory();
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Use Redis for multiple application instances:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis("localhost");
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Query caching and idempotency can use different Redis connections:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseCaching(cache =>
+    {
+        cache.Store.UseRedis(queryCacheRedis);
+        cache.DefaultExpiration = TimeSpan.FromMinutes(5);
+    });
+
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis(idempotencyRedis);
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Advanced applications can provide their own Redis connection factory:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis(provider =>
+            provider.GetRequiredService<IConnectionMultiplexer>());
+    });
+});
+```
+
+Commands opt in by implementing `IIdempotentCommand`:
+
+```csharp
+public sealed record SubmitOrderCommand(
+    Guid OrderId,
+    string IdempotencyKey) : IIdempotentCommand;
+```
+
+Set `RequireIdempotencyKey = true` when every command in the application should be idempotent.
+
+Idempotency behavior:
+
+- Commands that do not implement `IIdempotentCommand` pass through by default.
+- If `RequireIdempotencyKey` is enabled, non-idempotent commands fail before the handler runs.
+- Empty idempotency keys fail before the handler runs.
+- If the handler or transaction fails, Domium removes the reservation so the command can be retried.
+- If the handler succeeds, Domium keeps the reservation for the configured expiration window.
+- If the completion marker write fails after the handler succeeds, Domium does not remove the reservation because the command may already be committed.
 
 ## Tenancy
 
@@ -289,6 +439,8 @@ services.AddMassTransit(configurator =>
 ## Observability
 
 ```csharp
+using Domium.Observability.OpenTelemetry;
+
 services.AddDomiumOpenTelemetry(options =>
 {
     options.ServiceName = "Orders.Api";
@@ -302,6 +454,7 @@ Domium emits activities and metrics under the `Domium` source/meter.
 
 ## Documentation
 
+- [Tutorial](docs/tutorial.md)
 - [Architecture](docs/architecture.md)
 - [Persistence](docs/persistence.md)
 - [Publishing Packages](docs/publishing.md)

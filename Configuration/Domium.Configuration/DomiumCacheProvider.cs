@@ -1,4 +1,4 @@
-﻿namespace Domium.Extensions.DependencyInjection;
+namespace Domium.Configuration;
 
 public enum DomiumCacheProvider
 {

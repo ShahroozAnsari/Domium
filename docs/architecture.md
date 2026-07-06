@@ -9,7 +9,13 @@ Domain
   Entities, aggregate roots, IDs, value objects, domain events
 
 Application
-  Commands, queries, handlers, validation, logging, transactions, caching
+  Commands, queries, handlers, validation, logging, idempotency, transactions, caching
+
+Configuration
+  Core composition options, feature toggles, and registration pipeline
+
+Facade
+  Module-level APIs exposed to presentation layers or other modules
 
 Persistence
   Provider-neutral aggregate repository contract
@@ -26,11 +32,16 @@ Composition
 ## Design Rules
 
 - Domain packages do not depend on EF Core, Dapper, Redis, MassTransit, or OpenTelemetry.
+- Core registration lives in `Domium.Configuration`; `Domium.Extensions.DependencyInjection` is intentionally thin and only exposes extension methods such as `AddDomium`.
+- `AddDomium` scans loaded non-framework application assemblies by default. Explicit assembly registration is still available for assemblies that have not been loaded yet.
 - `IRepository<TAggregate, TId>` is for aggregate persistence only.
 - Query/read-model infrastructure is intentionally separate from aggregate persistence.
+- Facades may expose both command and query use cases as a single module API, but each method should delegate to the correct application command or query path.
+- Query caching and command idempotency share cache store implementations, but each feature owns its own store options and can use a different Redis connection.
+- Cache stores must support atomic `TrySetAsync(...)`; idempotency relies on it for duplicate-command protection.
 - EF-specific specification querying lives in the EF Core package through `IEfRepository<TAggregate, TId>`.
 - Dapper aggregate persistence is opt-in and requires explicit mappers.
-- Provider packages register their own infrastructure so `Domium.Extensions.DependencyInjection` stays lightweight.
+- Provider packages own provider-specific options and registration, for example OpenTelemetry options stay in `Domium.Observability.OpenTelemetry`.
 
 ## Command Side
 
@@ -60,6 +71,27 @@ services.AddDomiumEntityFrameworkCore<AppDbContext>(options =>
 
 services.AddDomium(options => options.UseTransactions());
 ```
+
+Transaction registration is explicitly toggleable:
+
+```csharp
+services.AddDomium(options => options.UseTransactions(false));
+```
+
+Idempotency is a command pipeline behavior. It runs before transactions, reserves an idempotency key atomically, and skips duplicate command execution:
+
+```csharp
+services.AddDomium(options =>
+{
+    options.UseIdempotency(idempotency =>
+    {
+        idempotency.Store.UseRedis("localhost:6379");
+        idempotency.Expiration = TimeSpan.FromHours(24);
+    });
+});
+```
+
+Commands opt in with `IIdempotentCommand`. Non-idempotent commands pass through unless `RequireIdempotencyKey` is enabled.
 
 ## Query Side
 
@@ -94,6 +126,7 @@ Applications can choose one or multiple providers:
 - EF Core for aggregate persistence and specifications.
 - Dapper for read models and/or mapped aggregate persistence.
 - Memory or Redis for query caching.
+- Memory or Redis for command idempotency.
 - MassTransit for external events.
 - OpenTelemetry for observability.
 

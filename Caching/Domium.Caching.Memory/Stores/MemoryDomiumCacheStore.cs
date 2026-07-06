@@ -16,6 +16,7 @@ public sealed class MemoryDomiumCacheStore : IDomiumCacheStore
 {
     private readonly IMemoryCache _memoryCache;
     private readonly MemoryCacheIndex _index;
+    private readonly object _syncRoot = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemoryDomiumCacheStore"/> class.
@@ -98,39 +99,35 @@ public sealed class MemoryDomiumCacheStore : IDomiumCacheStore
             throw new ArgumentException("Cache key cannot be null or empty.", nameof(key));
         }
 
-        var entryOptions = new MemoryCacheEntryOptions();
-
-        if (options != null)
-        {
-            if (options.AbsoluteExpirationRelativeToNow.HasValue)
-            {
-                entryOptions.AbsoluteExpirationRelativeToNow = options.AbsoluteExpirationRelativeToNow;
-            }
-
-            if (options.SlidingExpiration.HasValue)
-            {
-                entryOptions.SlidingExpiration = options.SlidingExpiration;
-            }
-        }
-
-        entryOptions.RegisterPostEvictionCallback((evictedKey, _, _, state) =>
-        {
-            if (evictedKey is string cacheKey && state is MemoryCacheIndex index)
-            {
-                index.RemoveKey(cacheKey);
-            }
-        }, _index);
-
-        var metadata = invalidationMetadata ?? new DomiumCacheInvalidationMetadata(null, null, null);
-        var envelope = new MemoryDomiumCacheEnvelope<T>(true, value, metadata);
-
-        _memoryCache.Set(key, envelope, entryOptions);
-
-        _index.AddTags(key, metadata.Tags);
-        _index.AddEntityKeys(key, metadata.EntityKeys);
-        _index.AddGroup(key, metadata.Group);
+        SetCore(key, value, options, invalidationMetadata);
 
         return Task.CompletedTask;
+    }
+
+    public Task<bool> TrySetAsync<T>(
+        string key,
+        T value,
+        DomiumCacheEntryOptions options,
+        DomiumCacheInvalidationMetadata invalidationMetadata,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new ArgumentException("Cache key cannot be null or empty.", nameof(key));
+        }
+
+        lock (_syncRoot)
+        {
+            if (_memoryCache.TryGetValue(key, out _))
+            {
+                return Task.FromResult(false);
+            }
+
+            SetCore(key, value, options, invalidationMetadata);
+            return Task.FromResult(true);
+        }
     }
 
     /// <summary>
@@ -228,5 +225,44 @@ public sealed class MemoryDomiumCacheStore : IDomiumCacheStore
         }
 
         return Task.CompletedTask;
+    }
+
+    private void SetCore<T>(
+        string key,
+        T value,
+        DomiumCacheEntryOptions options,
+        DomiumCacheInvalidationMetadata invalidationMetadata)
+    {
+        var entryOptions = new MemoryCacheEntryOptions();
+
+        if (options != null)
+        {
+            if (options.AbsoluteExpirationRelativeToNow.HasValue)
+            {
+                entryOptions.AbsoluteExpirationRelativeToNow = options.AbsoluteExpirationRelativeToNow;
+            }
+
+            if (options.SlidingExpiration.HasValue)
+            {
+                entryOptions.SlidingExpiration = options.SlidingExpiration;
+            }
+        }
+
+        entryOptions.RegisterPostEvictionCallback((evictedKey, _, _, state) =>
+        {
+            if (evictedKey is string cacheKey && state is MemoryCacheIndex index)
+            {
+                index.RemoveKey(cacheKey);
+            }
+        }, _index);
+
+        var metadata = invalidationMetadata ?? new DomiumCacheInvalidationMetadata(null, null, null);
+        var envelope = new MemoryDomiumCacheEnvelope<T>(true, value, metadata);
+
+        _memoryCache.Set(key, envelope, entryOptions);
+
+        _index.AddTags(key, metadata.Tags);
+        _index.AddEntityKeys(key, metadata.EntityKeys);
+        _index.AddGroup(key, metadata.Group);
     }
 }

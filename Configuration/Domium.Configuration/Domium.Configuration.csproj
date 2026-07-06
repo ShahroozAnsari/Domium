@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Description>Configuration and core registration for Domium framework composition.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
+    <PackageReference Include="Scrutor" Version="7.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Application\Domium.Application\Domium.Application.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching\Domium.Caching.csproj" />
+    <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing\Domium.Eventing.csproj" />
+    <ProjectReference Include="..\..\Facade\Domium.Facade.Abstractions\Domium.Facade.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Domium.Idempotency.Abstractions\Domium.Idempotency.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Idempotency\Domium.Idempotency\Domium.Idempotency.csproj" />
+    <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Tenancy\Domium.Tenancy\Domium.Tenancy.csproj" />
+    <ProjectReference Include="..\..\Tenancy\Domium.Tenancy.Abstractions\Domium.Tenancy.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

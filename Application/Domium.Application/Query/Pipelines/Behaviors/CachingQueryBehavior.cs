@@ -16,7 +16,7 @@ public sealed class CachingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavi
     where TQuery : class, IQuery<TResult>
     where TResult : class
 {
-    private readonly IDomiumCacheStore _cacheStore;
+    private readonly IDomiumQueryCacheStore _cacheStore;
     private readonly IDomiumCacheKeyProvider _cacheKeyProvider;
     private readonly IDomiumQueryCachePolicyProvider _policyProvider;
     private readonly IDomiumCacheScopeProvider _scopeProvider;
@@ -33,7 +33,7 @@ public sealed class CachingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavi
     /// <param name="invalidationMetadataProvider">The invalidation metadata provider.</param>
     /// <param name="entryOptionsFactory">The cache entry options factory.</param>
     public CachingQueryBehavior(
-        IDomiumCacheStore cacheStore,
+        IDomiumQueryCacheStore cacheStore,
         IDomiumCacheKeyProvider cacheKeyProvider,
         IDomiumQueryCachePolicyProvider policyProvider,
         IDomiumCacheScopeProvider scopeProvider,
