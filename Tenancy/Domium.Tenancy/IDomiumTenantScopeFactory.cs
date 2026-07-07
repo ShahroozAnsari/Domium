@@ -9,4 +9,5 @@ public interface IDomiumTenantScopeFactory
     /// Begins a scope for the supplied tenant identifier.
     /// </summary>
     IDisposable BeginScope(string tenantId);
+
 }

@@ -52,4 +52,64 @@ public sealed class TenancyTests
             Assert.Equal("outer", accessor.GetCurrent()?.TenantId);
         }
     }
+
+    [Fact]
+    public async Task Tenant_name_resolver_returns_ambient_tenant_id()
+    {
+        var services = new ServiceCollection();
+
+        services.AddDomium();
+
+        using var provider = services.BuildServiceProvider();
+        var scopeFactory = provider.GetRequiredService<IDomiumTenantScopeFactory>();
+
+        var resolver = provider.GetRequiredService<IDomiumTenantNameResolver>();
+
+        using (scopeFactory.BeginScope("acme"))
+        {
+            Assert.Equal("acme", resolver.ResolveTenantName());
+        }
+    }
+
+    [Theory]
+    [InlineData("tracking", null, "tracking")]
+    [InlineData("tracking", "", "tracking")]
+    [InlineData("tracking", "Acme Logistics", "acme_logistics_tracking")]
+    [InlineData("Tracking Service", "North-East", "north_east_tracking_service")]
+    public void Tenant_store_name_uses_tenant_id_when_available(
+        string serviceName,
+        string? tenantId,
+        string expected)
+    {
+        Assert.Equal(expected, DomiumTenantDatabaseName.Create(serviceName, tenantId));
+    }
+
+    [Fact]
+    public void Tenant_store_name_applies_database_template()
+    {
+        var connectionString = DomiumTenantDatabaseName.ApplyToTemplate(
+            "Host=localhost;Database={DatabaseName}",
+            "tracking",
+            "Acme");
+
+        Assert.Equal("Host=localhost;Database=acme_tracking", connectionString);
+    }
+
+    [Fact]
+    public void Tenant_connection_string_resolver_applies_database_template()
+    {
+        var services = new ServiceCollection();
+
+        services.AddDomium();
+
+        using var provider = services.BuildServiceProvider();
+        var resolver = provider.GetRequiredService<IDomiumTenantConnectionStringResolver>();
+
+        var connectionString = resolver.Resolve(
+            "tracking",
+            "Host=localhost;Database={DatabaseName};Tenant={TenantName}",
+            "Acme");
+
+        Assert.Equal("Host=localhost;Database=acme_tracking;Tenant=acme", connectionString);
+    }
 }

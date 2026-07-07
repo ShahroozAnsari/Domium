@@ -23,6 +23,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IDomiumTenantAccessor>(
             provider => provider.GetRequiredService<IDomiumTenantContextAccessor>());
         services.TryAddSingleton<IDomiumTenantScopeFactory, DomiumTenantScopeFactory>();
+        services.TryAddScoped<IDomiumTenantNameResolver, AmbientDomiumTenantNameResolver>();
+        services.TryAddSingleton<IDomiumTenantConnectionStringResolver, DomiumTenantConnectionStringResolver>();
 
         return services;
     }
