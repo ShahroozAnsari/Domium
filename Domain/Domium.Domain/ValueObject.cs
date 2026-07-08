@@ -9,6 +9,11 @@ public abstract class ValueObject : IValueObject
 {
     public override bool Equals(object? obj)
     {
+        if (ReferenceEquals(this, obj))
+        {
+            return true;
+        }
+
         if (obj is null || obj.GetType() != GetType())
         {
             return false;
@@ -20,14 +25,15 @@ public abstract class ValueObject : IValueObject
 
     public override int GetHashCode()
     {
-        return GetEqualityComponents()
-            .Aggregate(1, (current, component) =>
-            {
-                unchecked
-                {
-                    return current * 23 + (component?.GetHashCode() ?? 0);
-                }
-            });
+        var hashCode = new HashCode();
+        hashCode.Add(GetType());
+
+        foreach (var component in GetEqualityComponents())
+        {
+            hashCode.Add(component);
+        }
+
+        return hashCode.ToHashCode();
     }
 
     public static bool operator ==(ValueObject? left, ValueObject? right)
