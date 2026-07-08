@@ -1,5 +1,6 @@
 using Domium.Domain;
 using Domium.Domain.Abstractions.Aggregate;
+using Domium.Domain.Abstractions.Entity;
 using Domium.Domain.Abstractions.Events;
 using Domium.Persistence.Abstractions;
 using Domium.Persistence.EntityFrameworkCore;
@@ -115,21 +116,28 @@ public sealed class EntityFrameworkCoreRepositoryTests
     [Fact]
     public async Task DbContext_applies_audit_and_soft_delete_metadata()
     {
-        await using var provider = CreateProvider();
+        await using var provider = CreateProvider(currentUserId: "operator");
         var dbContext = provider.GetRequiredService<TestDbContext>();
         var customer = new SoftDeletedCustomer(new CustomerId(Guid.NewGuid()), "Ada");
 
         dbContext.SoftDeletedCustomers.Add(customer);
         await dbContext.SaveChangesAsync();
 
-        Assert.NotEqual(default, customer.CreatedAt);
+        Assert.NotEqual(
+            default,
+            dbContext.Entry(customer).Property<DateTimeOffset>(DomiumShadowPropertyNames.CreatedAt).CurrentValue);
 
         dbContext.SoftDeletedCustomers.Remove(customer);
         await dbContext.SaveChangesAsync();
 
-        Assert.True(customer.IsDeleted);
-        Assert.NotNull(customer.DeletedAt);
-        Assert.NotNull(customer.ModifiedAt);
+        Assert.True(dbContext.Entry(customer).Property<bool>(DomiumShadowPropertyNames.IsDeleted).CurrentValue);
+        Assert.NotNull(
+            dbContext.Entry(customer).Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt).CurrentValue);
+        Assert.Equal(
+            "operator",
+            dbContext.Entry(customer).Property<string?>(DomiumShadowPropertyNames.DeletedBy).CurrentValue);
+        Assert.NotNull(
+            dbContext.Entry(customer).Property<DateTimeOffset?>(DomiumShadowPropertyNames.ModifiedAt).CurrentValue);
         Assert.Equal(EntityState.Unchanged, dbContext.Entry(customer).State);
     }
 
@@ -141,9 +149,25 @@ public sealed class EntityFrameworkCoreRepositoryTests
     private static ServiceProvider CreateProvider<TDispatcher>()
         where TDispatcher : class, IDomainEventDispatcher
     {
+        return CreateProvider<TDispatcher>(currentUserId: null);
+    }
+
+    private static ServiceProvider CreateProvider(string? currentUserId)
+    {
+        return CreateProvider<CapturingDispatcher>(currentUserId);
+    }
+
+    private static ServiceProvider CreateProvider<TDispatcher>(string? currentUserId)
+        where TDispatcher : class, IDomainEventDispatcher
+    {
         var services = new ServiceCollection();
 
         services.AddSingleton<IDomainEventDispatcher, TDispatcher>();
+        if (currentUserId is not null)
+        {
+            services.AddScoped<IDomiumCurrentUserAccessor>(_ => new TestCurrentUserAccessor(currentUserId));
+        }
+
         services.AddDbContext<TestDbContext>(options =>
             options
                 .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -183,6 +207,13 @@ public sealed class EntityFrameworkCoreRepositoryTests
                         id => id.Value,
                         value => new CustomerId(value));
                 builder.Property(customer => customer.Name).IsRequired();
+                builder.Property<DateTimeOffset>(DomiumShadowPropertyNames.CreatedAt);
+                builder.Property<DateTimeOffset?>(DomiumShadowPropertyNames.ModifiedAt);
+                builder.Property<string?>(DomiumShadowPropertyNames.CreatedBy).HasMaxLength(160);
+                builder.Property<string?>(DomiumShadowPropertyNames.ModifiedBy).HasMaxLength(160);
+                builder.Property<bool>(DomiumShadowPropertyNames.IsDeleted);
+                builder.Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt);
+                builder.Property<string?>(DomiumShadowPropertyNames.DeletedBy).HasMaxLength(160);
                 builder.Ignore(customer => customer.DomainEvents);
             });
         }
@@ -221,10 +252,8 @@ public sealed class EntityFrameworkCoreRepositoryTests
         public CustomerId CustomerId { get; } = customerId;
     }
 
-    private sealed class SoftDeletedCustomer : SoftDeletableEntityBase<CustomerId>, IAggregateRoot<CustomerId>
+    private sealed class SoftDeletedCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity
     {
-        private readonly List<IDomainEvent> _domainEvents = new List<IDomainEvent>();
-
         private SoftDeletedCustomer()
             : base(new CustomerId(Guid.Empty))
         {
@@ -239,12 +268,11 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         public string Name { get; private set; }
 
-        public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+    }
 
-        public void ClearDomainEvents()
-        {
-            _domainEvents.Clear();
-        }
+    private sealed class TestCurrentUserAccessor(string? userId) : IDomiumCurrentUserAccessor
+    {
+        public string? UserId { get; } = userId;
     }
 
     private sealed class ActiveCustomersSpecification : Specification<Customer>

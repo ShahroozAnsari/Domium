@@ -122,8 +122,20 @@ public static class DomiumConfiguration
             .AddClasses(c => c.AssignableTo(typeof(IDomiumQueryCachePolicyProvider)))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
-            .WithSingletonLifetime()
+            .WithSingletonLifetime());
 
+        var applicationServiceAssemblies = GetApplicationServiceAssemblies(options, assemblies)
+            .Where(assembly => assembly is { IsDynamic: false })
+            .Distinct()
+            .ToArray();
+
+        if (applicationServiceAssemblies.Length == 0)
+        {
+            return;
+        }
+
+        services.Scan(scan => scan
+            .FromAssemblies(applicationServiceAssemblies)
             .AddClasses(c => c.Where(HasApplicationServiceInterfaces))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .As(GetApplicationServiceInterfaces)
@@ -146,6 +158,32 @@ public static class DomiumConfiguration
         foreach (var assembly in options.ApplicationAssemblies)
         {
             yield return assembly;
+        }
+    }
+
+    private static IEnumerable<Assembly> GetApplicationServiceAssemblies(
+        DomiumOptions options,
+        IEnumerable<Assembly> scannedAssemblies)
+    {
+        foreach (var assembly in options.ApplicationAssemblies)
+        {
+            yield return assembly;
+        }
+
+        if (options.ApplicationAssemblyNamePrefixes.Count == 0)
+        {
+            yield break;
+        }
+
+        foreach (var assembly in scannedAssemblies)
+        {
+            var name = assembly.GetName().Name;
+            if (!string.IsNullOrWhiteSpace(name) &&
+                options.ApplicationAssemblyNamePrefixes.Any(
+                    prefix => name.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                yield return assembly;
+            }
         }
     }
 
@@ -172,6 +210,8 @@ public static class DomiumConfiguration
 
         return !name.StartsWith("System.", StringComparison.Ordinal) &&
                !name.StartsWith("Microsoft.", StringComparison.Ordinal) &&
+               !name.StartsWith("MassTransit", StringComparison.Ordinal) &&
+               !name.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) &&
                !name.StartsWith("mscorlib", StringComparison.Ordinal) &&
                !name.StartsWith("netstandard", StringComparison.Ordinal) &&
                !IsDomiumFrameworkAssembly(name);
@@ -213,22 +253,37 @@ public static class DomiumConfiguration
     {
         return type
             .GetInterfaces()
-            .Where(IsApplicationServiceInterface)
+            .Where(serviceType => IsApplicationServiceInterface(type, serviceType))
             .Distinct();
     }
 
-    private static bool IsApplicationServiceInterface(Type serviceType)
+    private static bool IsApplicationServiceInterface(Type implementationType, Type serviceType)
     {
-        var namespaceName = serviceType.Namespace;
-
-        if (string.IsNullOrWhiteSpace(namespaceName))
+        if (serviceType.IsGenericTypeDefinition ||
+            serviceType.ContainsGenericParameters)
         {
             return false;
         }
 
-        return !namespaceName.StartsWith("System", StringComparison.Ordinal) &&
-               !namespaceName.StartsWith("Microsoft", StringComparison.Ordinal) &&
-               !namespaceName.StartsWith("Domium", StringComparison.Ordinal);
+        var implementationNamespace = implementationType.Namespace;
+        var serviceNamespace = serviceType.Namespace;
+
+        if (string.IsNullOrWhiteSpace(implementationNamespace) ||
+            string.IsNullOrWhiteSpace(serviceNamespace))
+        {
+            return false;
+        }
+
+        return !serviceNamespace.StartsWith("System", StringComparison.Ordinal) &&
+               !serviceNamespace.StartsWith("Microsoft", StringComparison.Ordinal) &&
+               !serviceNamespace.StartsWith("Domium", StringComparison.Ordinal) &&
+               GetNamespaceRoot(implementationNamespace) == GetNamespaceRoot(serviceNamespace);
+    }
+
+    private static string GetNamespaceRoot(string namespaceName)
+    {
+        var index = namespaceName.IndexOf('.');
+        return index < 0 ? namespaceName : namespaceName[..index];
     }
 
     private static void RegisterOptionalBehaviors(IServiceCollection services, DomiumOptions options)

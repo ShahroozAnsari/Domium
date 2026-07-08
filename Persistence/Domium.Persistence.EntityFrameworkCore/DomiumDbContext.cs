@@ -1,5 +1,4 @@
 using Domium.Domain.Abstractions.Aggregate;
-using Domium.Domain.Abstractions.Entity;
 using Domium.Domain.Abstractions.Events;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,8 +27,6 @@ public abstract class DomiumDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        ApplyEntityMetadata();
-
         var domainEvents = CaptureDomainEvents();
         var result = await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -40,47 +37,6 @@ public abstract class DomiumDbContext : DbContext
         }
 
         return result;
-    }
-
-    private void ApplyEntityMetadata()
-    {
-        var timestamp = DateTimeOffset.UtcNow;
-
-        foreach (var entry in ChangeTracker.Entries())
-        {
-            if (entry.State == EntityState.Deleted && entry.Entity is ISoftDeletableEntity)
-            {
-                InvokeEntityMethod(entry.Entity, "MarkDeleted", timestamp, null);
-                entry.State = EntityState.Modified;
-            }
-
-            if (entry.Entity is not IAuditableEntity)
-            {
-                continue;
-            }
-
-            if (entry.State == EntityState.Added)
-            {
-                InvokeEntityMethod(entry.Entity, "MarkCreated", timestamp, null);
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                InvokeEntityMethod(entry.Entity, "MarkModified", timestamp, null);
-            }
-        }
-    }
-
-    private static void InvokeEntityMethod(
-        object entity,
-        string methodName,
-        DateTimeOffset timestamp,
-        string? actor)
-    {
-        var method = entity.GetType().GetMethod(
-            methodName,
-            new[] { typeof(DateTimeOffset), typeof(string) });
-
-        method?.Invoke(entity, new object?[] { timestamp, actor });
     }
 
     internal DomainEventBatch CaptureDomainEvents()
