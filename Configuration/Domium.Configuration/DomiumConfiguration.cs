@@ -122,7 +122,12 @@ public static class DomiumConfiguration
             .AddClasses(c => c.AssignableTo(typeof(IDomiumQueryCachePolicyProvider)))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
-            .WithSingletonLifetime());
+            .WithSingletonLifetime()
+
+            .AddClasses(c => c.Where(HasApplicationServiceInterfaces))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .As(GetApplicationServiceInterfaces)
+            .WithScopedLifetime());
     }
 
     private static IEnumerable<Assembly> GetApplicationAssemblies(DomiumOptions options)
@@ -199,6 +204,31 @@ public static class DomiumConfiguration
                name == "Domium.Tenancy" ||
                name == "Domium.Tenancy.Abstractions" ||
                name == "Domium.Extensions.DependencyInjection";
+    }
+
+    private static bool HasApplicationServiceInterfaces(Type type) =>
+        GetApplicationServiceInterfaces(type).Any();
+
+    private static IEnumerable<Type> GetApplicationServiceInterfaces(Type type)
+    {
+        return type
+            .GetInterfaces()
+            .Where(IsApplicationServiceInterface)
+            .Distinct();
+    }
+
+    private static bool IsApplicationServiceInterface(Type serviceType)
+    {
+        var namespaceName = serviceType.Namespace;
+
+        if (string.IsNullOrWhiteSpace(namespaceName))
+        {
+            return false;
+        }
+
+        return !namespaceName.StartsWith("System", StringComparison.Ordinal) &&
+               !namespaceName.StartsWith("Microsoft", StringComparison.Ordinal) &&
+               !namespaceName.StartsWith("Domium", StringComparison.Ordinal);
     }
 
     private static void RegisterOptionalBehaviors(IServiceCollection services, DomiumOptions options)

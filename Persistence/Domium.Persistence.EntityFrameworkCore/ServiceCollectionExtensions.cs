@@ -69,6 +69,13 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<DbContext>(
             provider => provider.GetRequiredService<TDbContext>());
 
+        if (typeof(DomiumDbContext).IsAssignableFrom(typeof(TDbContext)))
+        {
+            services.TryAddScoped(
+                typeof(DomiumDbContext),
+                provider => provider.GetRequiredService<TDbContext>());
+        }
+
         services.TryAddScoped<IUnitOfWork, EfUnitOfWork>();
         services.TryAddScoped(typeof(IEfRepository<,>), typeof(EfRepository<,>));
         services.TryAddScoped(typeof(IRepository<,>), typeof(EfRepository<,>));
