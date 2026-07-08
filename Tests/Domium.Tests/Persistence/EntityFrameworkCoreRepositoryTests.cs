@@ -7,6 +7,7 @@ using Domium.Persistence.EntityFrameworkCore;
 using Domium.Persistence.EntityFrameworkCore.Specifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Tests.Persistence;
@@ -141,6 +142,37 @@ public sealed class EntityFrameworkCoreRepositoryTests
         Assert.Equal(EntityState.Unchanged, dbContext.Entry(customer).State);
     }
 
+    [Fact]
+    public async Task BaseEntityConfiguration_applies_shadow_properties_to_owned_children()
+    {
+        await using var provider = CreateProvider(currentUserId: "operator");
+        var dbContext = provider.GetRequiredService<TestDbContext>();
+        var customer = new ConfiguredCustomer(new CustomerId(Guid.NewGuid()), "Ada");
+        var note = new ConfiguredCustomerNote(Guid.NewGuid(), "Call before noon");
+
+        customer.AddNote(note);
+        dbContext.ConfiguredCustomers.Add(customer);
+        await dbContext.SaveChangesAsync();
+
+        var noteEntry = dbContext.Entry(note);
+        Assert.NotEqual(
+            default,
+            noteEntry.Property<DateTimeOffset>(DomiumShadowPropertyNames.CreatedAt).CurrentValue);
+        Assert.Equal(
+            "operator",
+            noteEntry.Property<string?>(DomiumShadowPropertyNames.CreatedBy).CurrentValue);
+
+        noteEntry.State = EntityState.Deleted;
+        await dbContext.SaveChangesAsync();
+
+        Assert.True(noteEntry.Property<bool>(DomiumShadowPropertyNames.IsDeleted).CurrentValue);
+        Assert.NotNull(noteEntry.Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt).CurrentValue);
+        Assert.NotNull(noteEntry.Property<DateTimeOffset?>(DomiumShadowPropertyNames.ModifiedAt).CurrentValue);
+        Assert.Equal(
+            "operator",
+            noteEntry.Property<string?>(DomiumShadowPropertyNames.DeletedBy).CurrentValue);
+    }
+
     private static ServiceProvider CreateProvider()
     {
         return CreateProvider<CapturingDispatcher>();
@@ -186,6 +218,8 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         public DbSet<SoftDeletedCustomer> SoftDeletedCustomers => Set<SoftDeletedCustomer>();
 
+        public DbSet<ConfiguredCustomer> ConfiguredCustomers => Set<ConfiguredCustomer>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Customer>(builder =>
@@ -216,6 +250,8 @@ public sealed class EntityFrameworkCoreRepositoryTests
                 builder.Property<string?>(DomiumShadowPropertyNames.DeletedBy).HasMaxLength(160);
                 builder.Ignore(customer => customer.DomainEvents);
             });
+
+            modelBuilder.ApplyConfiguration(new ConfiguredCustomerConfiguration());
         }
     }
 
@@ -268,6 +304,73 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         public string Name { get; private set; }
 
+    }
+
+    private sealed class ConfiguredCustomer : AggregateRoot<CustomerId>
+    {
+        private readonly List<ConfiguredCustomerNote> _notes = new List<ConfiguredCustomerNote>();
+
+        private ConfiguredCustomer()
+            : base(new CustomerId(Guid.Empty))
+        {
+            Name = string.Empty;
+        }
+
+        public ConfiguredCustomer(CustomerId id, string name)
+            : base(id)
+        {
+            Name = name;
+        }
+
+        public string Name { get; private set; }
+
+        public IReadOnlyCollection<ConfiguredCustomerNote> Notes => _notes.AsReadOnly();
+
+        public void AddNote(ConfiguredCustomerNote note)
+        {
+            _notes.Add(note);
+        }
+    }
+
+    private sealed class ConfiguredCustomerNote : EntityBase<Guid>, IAuditableEntity, ISoftDeletableEntity
+    {
+        private ConfiguredCustomerNote()
+            : base(Guid.Empty)
+        {
+            Text = string.Empty;
+        }
+
+        public ConfiguredCustomerNote(Guid id, string text)
+            : base(id)
+        {
+            Text = text;
+        }
+
+        public string Text { get; private set; }
+    }
+
+    private sealed class ConfiguredCustomerConfiguration : BaseEntityConfiguration<ConfiguredCustomer>
+    {
+        protected override string TableName => "configured_customers";
+
+        protected override string Schema => "test";
+
+        protected override void ConfigureAggregate(EntityTypeBuilder<ConfiguredCustomer> builder)
+        {
+            builder.Property(customer => customer.Id)
+                .HasConversion(
+                    id => id.Value,
+                    value => new CustomerId(value));
+            builder.Property(customer => customer.Name).IsRequired();
+            builder.OwnsMany(customer => customer.Notes, noteBuilder =>
+            {
+                noteBuilder.ToTable("configured_customer_notes", "test");
+                noteBuilder.WithOwner().HasForeignKey("CustomerId");
+                noteBuilder.HasKey(note => note.Id);
+                noteBuilder.Property(note => note.Text).IsRequired();
+            });
+            builder.Navigation(customer => customer.Notes).UsePropertyAccessMode(PropertyAccessMode.Field);
+        }
     }
 
     private sealed class TestCurrentUserAccessor(string? userId) : IDomiumCurrentUserAccessor
