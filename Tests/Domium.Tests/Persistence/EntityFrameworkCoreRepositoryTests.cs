@@ -1,6 +1,7 @@
 using Domium.Application.Abstractions.Events;
 using Domium.Domain;
 using Domium.Domain.Abstractions.Aggregate;
+using Domium.Domain.Abstractions.DomainService;
 using Domium.Domain.Abstractions.Entity;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions;
@@ -84,9 +85,12 @@ public sealed class EntityFrameworkCoreRepositoryTests
     {
         CapturingEventBus.Reset();
         await using var provider = CreateProvider();
-        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
+        var customer = new Customer(
+            new CustomerId(Guid.NewGuid()),
+            "Ada",
+            true,
+            provider.GetRequiredService<IEventBus>());
 
-        customer.AttachEventBus(provider.GetRequiredService<IEventBus>());
         customer.Activate();
 
         Assert.IsType<CustomerActivatedDomainEvent>(Assert.Single(CapturingEventBus.Events));
@@ -96,9 +100,11 @@ public sealed class EntityFrameworkCoreRepositoryTests
     public async Task Aggregate_publish_throws_when_event_bus_fails()
     {
         await using var provider = CreateProvider<FailingEventBus>();
-        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
-
-        customer.AttachEventBus(provider.GetRequiredService<IEventBus>());
+        var customer = new Customer(
+            new CustomerId(Guid.NewGuid()),
+            "Ada",
+            true,
+            provider.GetRequiredService<IEventBus>());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => Task.Run(customer.Activate));
     }
@@ -109,11 +115,14 @@ public sealed class EntityFrameworkCoreRepositoryTests
         await using var provider = CreateProviderWithDomainEventHandler();
         var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
-        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
+        var customer = new Customer(
+            new CustomerId(Guid.NewGuid()),
+            "Ada",
+            true,
+            provider.GetRequiredService<IEventBus>());
 
         await unitOfWork.BeginAsync();
         await repository.AddAsync(customer);
-        customer.AttachEventBus(provider.GetRequiredService<IEventBus>());
         customer.Activate();
         await unitOfWork.CommitAsync();
 
@@ -121,6 +130,27 @@ public sealed class EntityFrameworkCoreRepositoryTests
         var audit = await dbContext.CustomerActivationAudits.SingleAsync();
 
         Assert.Equal(customer.Id, audit.CustomerId);
+    }
+
+    [Fact]
+    public async Task Materialized_aggregate_receives_event_bus_and_domain_services()
+    {
+        CapturingEventBus.Reset();
+        await using var provider = CreateProviderWithDomainServices();
+        var dbContext = provider.GetRequiredService<TestDbContext>();
+        var customerId = new CustomerId(Guid.NewGuid());
+
+        dbContext.Customers.Add(new Customer(customerId, "Ada", false));
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+
+        var customer = await dbContext.Customers.SingleAsync(x => x.Id == customerId);
+
+        Assert.Equal("pricing", customer.DomainServiceName());
+
+        customer.Activate();
+
+        Assert.IsType<CustomerActivatedDomainEvent>(Assert.Single(CapturingEventBus.Events));
     }
 
     [Fact]
@@ -233,6 +263,21 @@ public sealed class EntityFrameworkCoreRepositoryTests
         return services.BuildServiceProvider();
     }
 
+    private static ServiceProvider CreateProviderWithDomainServices()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IEventBus, CapturingEventBus>();
+        services.AddScoped<IDomainService, TestDomainService>();
+        services.AddDbContext<TestDbContext>(options =>
+            options
+                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+                .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+        services.AddDomiumEntityFrameworkCore<TestDbContext>();
+
+        return services.BuildServiceProvider();
+    }
+
     private sealed class TestDbContext(
         DbContextOptions<TestDbContext> options,
         IEventBus eventBus)
@@ -304,6 +349,15 @@ public sealed class EntityFrameworkCoreRepositoryTests
             IsActive = isActive;
         }
 
+        public Customer(CustomerId id, string name, bool isActive, IEventBus eventBus)
+            : base(id, eventBus)
+        {
+            Name = name;
+            IsActive = isActive;
+        }
+
+        private TestDomainService PricingService { get; set; } = default!;
+
         public string Name { get; private set; }
 
         public bool IsActive { get; private set; }
@@ -313,6 +367,9 @@ public sealed class EntityFrameworkCoreRepositoryTests
             IsActive = true;
             RaiseEvent(new CustomerActivatedDomainEvent(Id));
         }
+
+        public string DomainServiceName() =>
+            PricingService.Name;
     }
 
     private sealed class CustomerActivatedDomainEvent(CustomerId customerId) : DomainEvent
@@ -340,6 +397,11 @@ public sealed class EntityFrameworkCoreRepositoryTests
             dbContext.CustomerActivationAudits.Add(CustomerActivationAudit.Create(domainEvent.CustomerId));
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class TestDomainService : IDomainService
+    {
+        public string Name => "pricing";
     }
 
     private sealed class SoftDeletedCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity
