@@ -4,6 +4,7 @@ using Domium.Persistence.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Domium.Persistence.EntityFrameworkCore;
 
@@ -32,8 +33,19 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
         builder.ToTable(TableName, Schema);
     }
 
-    protected virtual void ConfigureKey(EntityTypeBuilder<TAggregate> builder) =>
+    protected virtual void ConfigureKey(EntityTypeBuilder<TAggregate> builder)
+    {
         builder.HasKey("Id");
+
+        var idType = typeof(TAggregate).GetProperty("Id")?.PropertyType;
+        if (idType is not null && typeof(IAggregateId<Guid>).IsAssignableFrom(idType))
+        {
+            var converter = (ValueConverter)Activator.CreateInstance(
+                typeof(GuidAggregateIdConverter<>).MakeGenericType(idType))!;
+
+            builder.Property(idType, "Id").HasConversion(converter);
+        }
+    }
 
     protected virtual void ConfigureDomainEvents(EntityTypeBuilder<TAggregate> builder) =>
         builder.Ignore(x => x.DomainEvents);
@@ -93,4 +105,11 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
 
         return property;
     }
+
 }
+
+internal sealed class GuidAggregateIdConverter<TAggregateId>()
+    : ValueConverter<TAggregateId, Guid>(
+        id => id.Value,
+        value => (TAggregateId)Activator.CreateInstance(typeof(TAggregateId), value)!)
+    where TAggregateId : class, IAggregateId<Guid>;

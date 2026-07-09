@@ -15,10 +15,14 @@ public abstract class EntityBase : IEntityBase
 /// <typeparam name="TId">The identifier type.</typeparam>
 public abstract class EntityBase<TId> : EntityBase, IEntityBase<TId>
 {
+    protected EntityBase()
+    {
+        Id = default!;
+    }
+
     protected EntityBase(TId id)
     {
-        if (id == null) throw new ArgumentNullException(nameof(id));
-        Id = id;
+        Id = id ?? throw new ArgumentNullException(nameof(id));
     }
 
     public TId Id { get; protected set; }

@@ -120,13 +120,20 @@ services.AddDomium(options =>
 ## Domain Model
 
 ```csharp
-public sealed class OrderId(Guid value) : AggregateId<Guid>(value);
+public sealed class OrderId(Guid value) : AggregateId<Guid>(value)
+{
+    public static OrderId New() => new(Guid.CreateVersion7());
+}
 
 public sealed class Order : AggregateRoot<OrderId>
 {
-    private Order() : base(new OrderId(Guid.Empty))
+    private Order()
     {
         Number = string.Empty;
+    }
+
+    public Order(string number) : this(OrderId.New(), number)
+    {
     }
 
     public Order(OrderId id, string number) : base(id)

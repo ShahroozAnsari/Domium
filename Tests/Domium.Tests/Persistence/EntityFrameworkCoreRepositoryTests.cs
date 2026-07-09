@@ -260,7 +260,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
     private sealed class Customer : AggregateRoot<CustomerId>
     {
         private Customer()
-            : base(new CustomerId(Guid.Empty))
         {
             Name = string.Empty;
         }
@@ -291,7 +290,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
     private sealed class SoftDeletedCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity
     {
         private SoftDeletedCustomer()
-            : base(new CustomerId(Guid.Empty))
         {
             Name = string.Empty;
         }
@@ -311,7 +309,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
         private readonly List<ConfiguredCustomerNote> _notes = new List<ConfiguredCustomerNote>();
 
         private ConfiguredCustomer()
-            : base(new CustomerId(Guid.Empty))
         {
             Name = string.Empty;
         }

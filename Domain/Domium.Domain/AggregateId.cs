@@ -11,6 +11,11 @@ public abstract class AggregateId<T> : ValueObject, IAggregateId<T>
     protected AggregateId(T value)
     {
         if (value == null) throw new ArgumentNullException(nameof(value));
+        if (value is Guid guid && guid == Guid.Empty)
+        {
+            throw new ArgumentException($"{GetType().Name} cannot be empty.", nameof(value));
+        }
+
         Value = value;
     }
 
@@ -27,4 +32,6 @@ public abstract class AggregateId<T> : ValueObject, IAggregateId<T>
     {
         return Value?.ToString() ?? string.Empty;
     }
+
+    public static implicit operator T(AggregateId<T> id) => id.Value;
 }
