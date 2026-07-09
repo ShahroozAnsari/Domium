@@ -1,12 +1,12 @@
 using Domium.Domain.Abstractions.Aggregate;
-using Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions;
 
 namespace Domium.Domain;
 
 public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     where TId : IAggregateId
 {
-    private readonly List<IDomainEvent> _domainEvents = new();
+    private IEventBus? _eventBus;
 
     protected AggregateRoot()
     {
@@ -16,16 +16,25 @@ public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     {
     }
 
-    public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
-    
-    public void ClearDomainEvents()
+    protected AggregateRoot(TId id, IEventBus eventBus) : base(id)
     {
-        _domainEvents.Clear();
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
-    
-    protected void RaiseDomainEvent(IDomainEvent domainEvent)
+
+    protected IEventBus EventBus =>
+        _eventBus
+        ?? throw new InvalidOperationException(
+            $"Aggregate '{GetType().Name}' cannot publish events because no event bus was provided.");
+
+    public void AttachEventBus(IEventBus eventBus)
     {
-        if (domainEvent == null) throw new ArgumentNullException(nameof(domainEvent));
-        _domainEvents.Add(domainEvent);
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+    }
+
+    protected void RaiseEvent(IDomiumEvent @event)
+    {
+        if (@event == null) throw new ArgumentNullException(nameof(@event));
+
+        EventBus.PublishAsync(@event).GetAwaiter().GetResult();
     }
 }

@@ -17,7 +17,6 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
     {
         ConfigureTable(builder);
         ConfigureKey(builder);
-        ConfigureDomainEvents(builder);
         ConfigureAggregate(builder);
         ConfigureDomiumShadowProperties(builder.Metadata.Model.GetEntityTypes());
     }
@@ -46,9 +45,6 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
             builder.Property(idType, "Id").HasConversion(converter);
         }
     }
-
-    protected virtual void ConfigureDomainEvents(EntityTypeBuilder<TAggregate> builder) =>
-        builder.Ignore(x => x.DomainEvents);
 
     protected static PropertyBuilder<string> RequiredString(PropertyBuilder<string> property, int maxLength) =>
         property.HasMaxLength(maxLength).IsRequired();

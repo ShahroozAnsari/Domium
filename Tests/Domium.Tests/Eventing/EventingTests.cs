@@ -1,5 +1,6 @@
+using Domium.Application.Abstractions.Events;
 using Domium.Domain;
-using Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
 using Domium.Extensions.DependencyInjection;
@@ -28,7 +29,7 @@ public sealed class EventingTests
     }
 
     [Fact]
-    public async Task Domain_event_dispatcher_also_uses_internal_event_handlers()
+    public async Task EventBus_uses_internal_and_domain_event_handlers()
     {
         InternalPingHandler.Reset();
         DomainPingHandler.Reset();
@@ -37,12 +38,30 @@ public sealed class EventingTests
         services.AddDomium();
 
         await using var provider = services.BuildServiceProvider();
-        var dispatcher = provider.GetRequiredService<IDomainEventDispatcher>();
+        var eventBus = provider.GetRequiredService<IEventBus>();
 
-        await dispatcher.DispatchAsync(new IDomainEvent[] { new InternalPingEvent("domain") });
+        await eventBus.PublishAsync(new InternalPingEvent("domain"));
 
         Assert.Equal("domain", InternalPingHandler.LastMessage);
         Assert.Equal("domain", DomainPingHandler.LastMessage);
+    }
+
+    [Fact]
+    public async Task EventBus_publishes_domain_events_to_application_handlers_in_memory()
+    {
+        InternalPingHandler.Reset();
+        DomainPingHandler.Reset();
+        var services = new ServiceCollection();
+
+        services.AddDomium();
+
+        await using var provider = services.BuildServiceProvider();
+        var eventBus = provider.GetRequiredService<IEventBus>();
+
+        await eventBus.PublishAsync(new InternalPingEvent("event-bus"));
+
+        Assert.Equal("event-bus", InternalPingHandler.LastMessage);
+        Assert.Equal("event-bus", DomainPingHandler.LastMessage);
     }
 
     public sealed class InternalPingEvent(string message) : DomainEvent

@@ -26,12 +26,6 @@ public sealed class EfUnitOfWork(DbContext dbContext) : IUnitOfWork, IAsyncDispo
 
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
-        if (_dbContext is DomiumDbContext domiumDbContext)
-        {
-            await CommitDomiumDbContextAsync(domiumDbContext, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         if (_transaction is not null)
@@ -60,27 +54,5 @@ public sealed class EfUnitOfWork(DbContext dbContext) : IUnitOfWork, IAsyncDispo
         {
             await _transaction.DisposeAsync().ConfigureAwait(false);
         }
-    }
-
-    private async Task CommitDomiumDbContextAsync(
-        DomiumDbContext dbContext,
-        CancellationToken cancellationToken)
-    {
-        var domainEvents = dbContext.CaptureDomainEvents();
-
-        using (dbContext.SuppressDomainEventDispatch())
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        if (_transaction is not null)
-        {
-            await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            await _transaction.DisposeAsync().ConfigureAwait(false);
-            _transaction = null;
-        }
-
-        await dbContext.DispatchDomainEventsAsync(domainEvents, cancellationToken).ConfigureAwait(false);
-        DomiumDbContext.ClearDomainEvents(domainEvents);
     }
 }

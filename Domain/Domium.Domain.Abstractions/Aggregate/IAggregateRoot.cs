@@ -1,13 +1,9 @@
 using Domium.Domain.Abstractions.Entity;
-using Domium.Domain.Abstractions.Events;
 
 namespace Domium.Domain.Abstractions.Aggregate;
 
 public interface IAggregateRoot : IEntityBase
 {
-    IReadOnlyCollection<IDomainEvent> DomainEvents { get; }
-
-    void ClearDomainEvents();
 }
 
 /// <summary>

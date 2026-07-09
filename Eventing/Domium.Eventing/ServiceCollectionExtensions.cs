@@ -1,3 +1,4 @@
+using Domium.Eventing.Abstractions;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
 using Domium.Eventing.Internal;
@@ -22,6 +23,7 @@ public static class ServiceCollectionExtensions
             throw new ArgumentNullException(nameof(services));
         }
 
+        services.TryAddScoped<IEventBus, InMemoryEventBus>();
         services.TryAddScoped<IInternalEventPublisher, InternalEventPublisher>();
         services.TryAddScoped<IExternalEventPublisher, NullExternalEventPublisher>();
 

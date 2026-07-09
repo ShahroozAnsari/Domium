@@ -1,5 +1,4 @@
-using Domium.Domain.Abstractions.Aggregate;
-using Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Domium.Persistence.EntityFrameworkCore;
@@ -9,9 +8,6 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// </summary>
 public abstract class DomiumDbContext : DbContext
 {
-    private readonly IDomainEventDispatcher? _domainEventDispatcher;
-    private bool _suppressDomainEventDispatch;
-
     protected DomiumDbContext(DbContextOptions options)
         : base(options)
     {
@@ -19,99 +15,8 @@ public abstract class DomiumDbContext : DbContext
 
     protected DomiumDbContext(
         DbContextOptions options,
-        IDomainEventDispatcher? domainEventDispatcher)
+        IEventBus? eventBus)
         : base(options)
     {
-        _domainEventDispatcher = domainEventDispatcher;
-    }
-
-    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-    {
-        var domainEvents = CaptureDomainEvents();
-        var result = await base.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        if (!_suppressDomainEventDispatch && domainEvents.Events.Count > 0)
-        {
-            await DispatchDomainEventsAsync(domainEvents, cancellationToken).ConfigureAwait(false);
-            ClearDomainEvents(domainEvents);
-        }
-
-        return result;
-    }
-
-    internal DomainEventBatch CaptureDomainEvents()
-    {
-        var aggregateRoots = ChangeTracker
-            .Entries<IAggregateRoot>()
-            .Select(entry => entry.Entity)
-            .Where(aggregate => aggregate.DomainEvents.Count > 0)
-            .ToArray();
-
-        var domainEvents = aggregateRoots
-            .SelectMany(aggregate => aggregate.DomainEvents)
-            .ToArray();
-
-        return new DomainEventBatch(aggregateRoots, domainEvents);
-    }
-
-    internal async Task DispatchDomainEventsAsync(
-        DomainEventBatch domainEvents,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(domainEvents);
-
-        if (_domainEventDispatcher is null || domainEvents.Events.Count == 0)
-        {
-            return;
-        }
-
-        await _domainEventDispatcher
-            .DispatchAsync(domainEvents.Events, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    internal static void ClearDomainEvents(DomainEventBatch domainEvents)
-    {
-        ArgumentNullException.ThrowIfNull(domainEvents);
-
-        foreach (var aggregateRoot in domainEvents.AggregateRoots)
-        {
-            aggregateRoot.ClearDomainEvents();
-        }
-    }
-
-    internal IDisposable SuppressDomainEventDispatch()
-    {
-        var previous = _suppressDomainEventDispatch;
-        _suppressDomainEventDispatch = true;
-        return new DispatchSuppressionScope(this, previous);
-    }
-
-    internal sealed class DomainEventBatch(
-        IReadOnlyCollection<IAggregateRoot> aggregateRoots,
-        IReadOnlyCollection<IDomainEvent> events)
-    {
-        public IReadOnlyCollection<IAggregateRoot> AggregateRoots { get; } = aggregateRoots;
-
-        public IReadOnlyCollection<IDomainEvent> Events { get; } = events;
-    }
-
-    private sealed class DispatchSuppressionScope(
-        DomiumDbContext dbContext,
-        bool previous)
-        : IDisposable
-    {
-        private bool _disposed;
-
-        public void Dispose()
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            dbContext._suppressDomainEventDispatch = previous;
-            _disposed = true;
-        }
     }
 }

@@ -122,7 +122,9 @@ services.AddDomium(options =>
 ```csharp
 public sealed class OrderId(Guid value) : AggregateId<Guid>(value)
 {
-    public static OrderId New() => new(Guid.CreateVersion7());
+    public OrderId() : this(Guid.CreateVersion7())
+    {
+    }
 }
 
 public sealed class Order : AggregateRoot<OrderId>
@@ -132,7 +134,7 @@ public sealed class Order : AggregateRoot<OrderId>
         Number = string.Empty;
     }
 
-    public Order(string number) : this(OrderId.New(), number)
+    public Order(string number) : this(new OrderId(), number)
     {
     }
 
@@ -167,7 +169,7 @@ public sealed class CreateOrderHandler(IRepository<Order, OrderId> repository)
         CreateOrderCommand command,
         CancellationToken cancellationToken = default)
     {
-        var order = new Order(new OrderId(Guid.NewGuid()), command.Number);
+        var order = new Order(new OrderId(), command.Number);
         return repository.AddAsync(order, cancellationToken);
     }
 }

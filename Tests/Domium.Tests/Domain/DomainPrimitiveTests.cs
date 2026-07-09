@@ -1,5 +1,6 @@
 using Domium.Domain;
 using Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions;
 
 namespace Domium.Tests.Domain;
 
@@ -60,27 +61,34 @@ public sealed class DomainPrimitiveTests
     }
 
     [Fact]
-    public void Aggregate_root_records_and_clears_domain_events()
+    public void Aggregate_root_publishes_domain_events_through_event_bus()
     {
-        var customer = new Customer(new CustomerId(Guid.NewGuid()));
+        var eventBus = new CapturingEventBus();
+        var customer = new Customer(new CustomerId(Guid.NewGuid()), eventBus);
 
         customer.Activate();
 
-        var domainEvent = Assert.Single(customer.DomainEvents);
+        var domainEvent = Assert.Single(eventBus.Events);
         Assert.IsType<CustomerActivatedDomainEvent>(domainEvent);
-
-        customer.ClearDomainEvents();
-
-        Assert.Empty(customer.DomainEvents);
     }
 
     private sealed class CustomerId(Guid value) : AggregateId<Guid>(value);
 
-    private sealed class Customer(CustomerId id) : AggregateRoot<CustomerId>(id)
+    private sealed class Customer : AggregateRoot<CustomerId>
     {
+        public Customer(CustomerId id)
+            : base(id)
+        {
+        }
+
+        public Customer(CustomerId id, IEventBus eventBus)
+            : base(id, eventBus)
+        {
+        }
+
         public void Activate()
         {
-            RaiseDomainEvent(new CustomerActivatedDomainEvent(Id));
+            RaiseEvent(new CustomerActivatedDomainEvent(Id));
         }
     }
 
@@ -130,5 +138,31 @@ public sealed class DomainPrimitiveTests
     private sealed class CustomerActivatedDomainEvent(CustomerId customerId) : DomainEvent
     {
         public CustomerId CustomerId { get; } = customerId;
+    }
+
+    private sealed class CapturingEventBus : IEventBus
+    {
+        private readonly List<IDomiumEvent> _events = new();
+
+        public IReadOnlyCollection<IDomiumEvent> Events => _events.AsReadOnly();
+
+        public Task PublishAsync<TEvent>(
+            TEvent @event,
+            CancellationToken cancellationToken = default)
+            where TEvent : IDomiumEvent
+        {
+            _events.Add(@event);
+            return Task.CompletedTask;
+        }
+
+        public async Task PublishAsync(
+            IReadOnlyCollection<IDomiumEvent> events,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var @event in events)
+            {
+                await PublishAsync(@event, cancellationToken);
+            }
+        }
     }
 }

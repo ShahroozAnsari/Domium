@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain\Domium.Domain.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

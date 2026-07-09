@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

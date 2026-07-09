@@ -1,15 +1,16 @@
+using Domium.Application.Abstractions.Events;
 using Domium.Application.Abstractions.Command;
 using Domium.Domain;
-using Domium.Domain.Abstractions.Events;
+using Domium.Eventing.Abstractions;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Tests.DependencyInjection;
 
-public sealed class DomainEventDispatcherTests
+public sealed class DomainEventBusRegistrationTests
 {
     [Fact]
-    public async Task AddDomium_registers_domain_event_handlers_and_dispatcher()
+    public async Task AddDomium_registers_domain_event_handlers_and_event_bus()
     {
         PingedHandler.Reset();
         var services = new ServiceCollection();
@@ -17,9 +18,9 @@ public sealed class DomainEventDispatcherTests
         services.AddDomium();
 
         await using var provider = services.BuildServiceProvider();
-        var dispatcher = provider.GetRequiredService<IDomainEventDispatcher>();
+        var eventBus = provider.GetRequiredService<IEventBus>();
 
-        await dispatcher.DispatchAsync(new IDomainEvent[] { new PingedDomainEvent("ready") });
+        await eventBus.PublishAsync(new PingedDomainEvent("ready"));
 
         Assert.Equal("ready", PingedHandler.LastMessage);
     }

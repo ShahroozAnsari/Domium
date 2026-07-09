@@ -2,12 +2,12 @@ using System.Reflection;
 using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Application.Abstractions.Command.Validation;
+using Domium.Application.Abstractions.Events;
 using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
 using Domium.Application.Abstractions.Query.Validation;
 using Domium.Application.Command;
 using Domium.Application.Command.Pipelines.Behaviors;
-using Domium.Application.Events;
 using Domium.Application.Query;
 using Domium.Application.Query.Pipelines.Behaviors;
 using Domium.Caching.Abstractions.Providers;
@@ -16,7 +16,6 @@ using Domium.Caching.Memory.Stores;
 using Domium.Caching.Providers;
 using Domium.Caching.Redis.Stores;
 using Domium.Caching.Stores;
-using Domium.Domain.Abstractions.Events;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
@@ -56,7 +55,6 @@ public static class DomiumConfiguration
     {
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
-        services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
         services.AddDomiumEventing();
         services.AddDomiumTenancy();
     }

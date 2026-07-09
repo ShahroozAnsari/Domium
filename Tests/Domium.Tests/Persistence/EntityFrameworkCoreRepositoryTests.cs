@@ -1,7 +1,9 @@
+using Domium.Application.Abstractions.Events;
 using Domium.Domain;
 using Domium.Domain.Abstractions.Aggregate;
 using Domium.Domain.Abstractions.Entity;
-using Domium.Domain.Abstractions.Events;
+using Domium.Eventing;
+using Domium.Eventing.Abstractions;
 using Domium.Persistence.Abstractions;
 using Domium.Persistence.EntityFrameworkCore;
 using Domium.Persistence.EntityFrameworkCore.Specifications;
@@ -37,7 +39,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
     {
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomainEventDispatcher, CapturingDispatcher>();
+        services.AddSingleton<IEventBus, CapturingEventBus>();
         services.AddDomiumEntityFrameworkCore<TestDbContext>(options =>
             options
                 .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -78,40 +80,47 @@ public sealed class EntityFrameworkCoreRepositoryTests
     }
 
     [Fact]
-    public async Task DbContext_dispatches_domain_events_after_save()
+    public async Task Aggregate_publishes_domain_events_through_event_bus()
     {
-        CapturingDispatcher.Reset();
+        CapturingEventBus.Reset();
         await using var provider = CreateProvider();
-        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
-        var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
         var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
 
+        customer.AttachEventBus(provider.GetRequiredService<IEventBus>());
         customer.Activate();
 
-        await unitOfWork.BeginAsync();
-        await repository.AddAsync(customer);
-        await unitOfWork.CommitAsync();
-
-        Assert.IsType<CustomerActivatedDomainEvent>(Assert.Single(CapturingDispatcher.Events));
-        Assert.Empty(customer.DomainEvents);
+        Assert.IsType<CustomerActivatedDomainEvent>(Assert.Single(CapturingEventBus.Events));
     }
 
     [Fact]
-    public async Task DbContext_keeps_domain_events_when_dispatch_fails()
+    public async Task Aggregate_publish_throws_when_event_bus_fails()
     {
-        await using var provider = CreateProvider<FailingDispatcher>();
+        await using var provider = CreateProvider<FailingEventBus>();
+        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
+
+        customer.AttachEventBus(provider.GetRequiredService<IEventBus>());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Task.Run(customer.Activate));
+    }
+
+    [Fact]
+    public async Task UnitOfWork_saves_domain_event_handler_changes_before_commit()
+    {
+        await using var provider = CreateProviderWithDomainEventHandler();
         var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
         var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
 
-        customer.Activate();
-
         await unitOfWork.BeginAsync();
         await repository.AddAsync(customer);
+        customer.AttachEventBus(provider.GetRequiredService<IEventBus>());
+        customer.Activate();
+        await unitOfWork.CommitAsync();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => unitOfWork.CommitAsync());
+        var dbContext = provider.GetRequiredService<TestDbContext>();
+        var audit = await dbContext.CustomerActivationAudits.SingleAsync();
 
-        Assert.NotEmpty(customer.DomainEvents);
+        Assert.Equal(customer.Id, audit.CustomerId);
     }
 
     [Fact]
@@ -175,26 +184,26 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
     private static ServiceProvider CreateProvider()
     {
-        return CreateProvider<CapturingDispatcher>();
+        return CreateProvider<CapturingEventBus>();
     }
 
-    private static ServiceProvider CreateProvider<TDispatcher>()
-        where TDispatcher : class, IDomainEventDispatcher
+    private static ServiceProvider CreateProvider<TEventBus>()
+        where TEventBus : class, IEventBus
     {
-        return CreateProvider<TDispatcher>(currentUserId: null);
+        return CreateProvider<TEventBus>(currentUserId: null);
     }
 
     private static ServiceProvider CreateProvider(string? currentUserId)
     {
-        return CreateProvider<CapturingDispatcher>(currentUserId);
+        return CreateProvider<CapturingEventBus>(currentUserId);
     }
 
-    private static ServiceProvider CreateProvider<TDispatcher>(string? currentUserId)
-        where TDispatcher : class, IDomainEventDispatcher
+    private static ServiceProvider CreateProvider<TEventBus>(string? currentUserId)
+        where TEventBus : class, IEventBus
     {
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomainEventDispatcher, TDispatcher>();
+        services.AddSingleton<IEventBus, TEventBus>();
         if (currentUserId is not null)
         {
             services.AddScoped<IDomiumCurrentUserAccessor>(_ => new TestCurrentUserAccessor(currentUserId));
@@ -209,16 +218,33 @@ public sealed class EntityFrameworkCoreRepositoryTests
         return services.BuildServiceProvider();
     }
 
+    private static ServiceProvider CreateProviderWithDomainEventHandler()
+    {
+        var services = new ServiceCollection();
+
+        services.AddDomiumEventing();
+        services.AddScoped<IDomainEventHandler<CustomerActivatedDomainEvent>, CustomerActivatedAuditHandler>();
+        services.AddDbContext<TestDbContext>(options =>
+            options
+                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+                .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+        services.AddDomiumEntityFrameworkCore<TestDbContext>();
+
+        return services.BuildServiceProvider();
+    }
+
     private sealed class TestDbContext(
         DbContextOptions<TestDbContext> options,
-        IDomainEventDispatcher domainEventDispatcher)
-        : DomiumDbContext(options, domainEventDispatcher)
+        IEventBus eventBus)
+        : DomiumDbContext(options, eventBus)
     {
         public DbSet<Customer> Customers => Set<Customer>();
 
         public DbSet<SoftDeletedCustomer> SoftDeletedCustomers => Set<SoftDeletedCustomer>();
 
         public DbSet<ConfiguredCustomer> ConfiguredCustomers => Set<ConfiguredCustomer>();
+
+        public DbSet<CustomerActivationAudit> CustomerActivationAudits => Set<CustomerActivationAudit>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -230,7 +256,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
                         id => id.Value,
                         value => new CustomerId(value));
                 builder.Property(customer => customer.Name).IsRequired();
-                builder.Ignore(customer => customer.DomainEvents);
             });
 
             modelBuilder.Entity<SoftDeletedCustomer>(builder =>
@@ -248,10 +273,18 @@ public sealed class EntityFrameworkCoreRepositoryTests
                 builder.Property<bool>(DomiumShadowPropertyNames.IsDeleted);
                 builder.Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt);
                 builder.Property<string?>(DomiumShadowPropertyNames.DeletedBy).HasMaxLength(160);
-                builder.Ignore(customer => customer.DomainEvents);
             });
 
             modelBuilder.ApplyConfiguration(new ConfiguredCustomerConfiguration());
+
+            modelBuilder.Entity<CustomerActivationAudit>(builder =>
+            {
+                builder.HasKey(audit => audit.Id);
+                builder.Property(audit => audit.CustomerId)
+                    .HasConversion(
+                        id => id.Value,
+                        value => new CustomerId(value));
+            });
         }
     }
 
@@ -278,13 +311,35 @@ public sealed class EntityFrameworkCoreRepositoryTests
         public void Activate()
         {
             IsActive = true;
-            RaiseDomainEvent(new CustomerActivatedDomainEvent(Id));
+            RaiseEvent(new CustomerActivatedDomainEvent(Id));
         }
     }
 
     private sealed class CustomerActivatedDomainEvent(CustomerId customerId) : DomainEvent
     {
         public CustomerId CustomerId { get; } = customerId;
+    }
+
+    private sealed class CustomerActivationAudit
+    {
+        public Guid Id { get; private set; } = Guid.NewGuid();
+
+        public CustomerId CustomerId { get; private set; } = new(Guid.NewGuid());
+
+        public static CustomerActivationAudit Create(CustomerId customerId) =>
+            new() { CustomerId = customerId };
+    }
+
+    private sealed class CustomerActivatedAuditHandler(TestDbContext dbContext)
+        : IDomainEventHandler<CustomerActivatedDomainEvent>
+    {
+        public Task HandleAsync(
+            CustomerActivatedDomainEvent domainEvent,
+            CancellationToken cancellationToken = default)
+        {
+            dbContext.CustomerActivationAudits.Add(CustomerActivationAudit.Create(domainEvent.CustomerId));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class SoftDeletedCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity
@@ -384,33 +439,55 @@ public sealed class EntityFrameworkCoreRepositoryTests
         }
     }
 
-    private sealed class CapturingDispatcher : IDomainEventDispatcher
+    private sealed class CapturingEventBus : IEventBus
     {
-        private static readonly List<IDomainEvent> CapturedEvents = new List<IDomainEvent>();
+        private static readonly List<IDomiumEvent> CapturedEvents = new List<IDomiumEvent>();
 
-        public static IReadOnlyCollection<IDomainEvent> Events => CapturedEvents.AsReadOnly();
+        public static IReadOnlyCollection<IDomiumEvent> Events => CapturedEvents.AsReadOnly();
 
         public static void Reset()
         {
             CapturedEvents.Clear();
         }
 
-        public Task DispatchAsync(
-            IReadOnlyCollection<IDomainEvent> domainEvents,
+        public Task PublishAsync<TEvent>(
+            TEvent @event,
+            CancellationToken cancellationToken = default)
+            where TEvent : IDomiumEvent
+        {
+            CapturedEvents.Add(@event);
+            return Task.CompletedTask;
+        }
+
+        public async Task PublishAsync(
+            IReadOnlyCollection<IDomiumEvent> events,
             CancellationToken cancellationToken = default)
         {
-            CapturedEvents.AddRange(domainEvents);
-            return Task.CompletedTask;
+            foreach (var @event in events)
+            {
+                await PublishAsync(@event, cancellationToken);
+            }
         }
     }
 
-    private sealed class FailingDispatcher : IDomainEventDispatcher
+    private sealed class FailingEventBus : IEventBus
     {
-        public Task DispatchAsync(
-            IReadOnlyCollection<IDomainEvent> domainEvents,
+        public Task PublishAsync<TEvent>(
+            TEvent @event,
             CancellationToken cancellationToken = default)
+            where TEvent : IDomiumEvent
         {
             throw new InvalidOperationException("Dispatch failed.");
+        }
+
+        public async Task PublishAsync(
+            IReadOnlyCollection<IDomiumEvent> events,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var @event in events)
+            {
+                await PublishAsync(@event, cancellationToken);
+            }
         }
     }
 }
