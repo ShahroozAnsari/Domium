@@ -8,15 +8,14 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// </summary>
 public abstract class DomiumDbContext : DbContext
 {
+
     protected DomiumDbContext(DbContextOptions options)
         : base(options)
     {
     }
-
-    protected DomiumDbContext(
-        DbContextOptions options,
-        IEventBus? eventBus)
-        : base(options)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ModelBuilderEntityConfigurationExtensions.ApplyDomiumEntityConfigurationsFromAssemblies(modelBuilder, AppDomain.CurrentDomain.GetAssemblies());
     }
+
 }

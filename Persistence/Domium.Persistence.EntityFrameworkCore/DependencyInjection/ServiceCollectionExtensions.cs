@@ -1,3 +1,4 @@
+using Domium.Domain.Abstractions.DomainService;
 using Domium.Persistence.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -102,7 +103,7 @@ public static class ServiceCollectionExtensions
         }
 
         services.TryAddScoped<IUnitOfWork, EfUnitOfWork>();
-        services.TryAddScoped(typeof(IEfRepository<,>), typeof(EfRepository<,>));
+
         services.TryAddScoped(typeof(IRepository<,>), typeof(EfRepository<,>));
         services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
         services.TryAddScoped<IDomiumCurrentUserAccessor, NullDomiumCurrentUserAccessor>();

@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Domium.Domain;
 using Domium.Domain.Abstractions.Aggregate;
+using Domium.Domain.Abstractions.DomainService;
 using Domium.Extensions.DependencyInjection;
 using Domium.Persistence.Abstractions;
 using Domium.Persistence.Dapper;

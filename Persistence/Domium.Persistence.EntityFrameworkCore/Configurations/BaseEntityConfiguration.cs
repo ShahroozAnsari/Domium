@@ -21,9 +21,9 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
         ConfigureDomiumShadowProperties(builder.Metadata.Model.GetEntityTypes());
     }
 
-    protected abstract string TableName { get; }
+    protected virtual string TableName => typeof(TAggregate).Name;
 
-    protected abstract string Schema { get; }
+    protected virtual string Schema => GetSchemaName();
 
     protected abstract void ConfigureAggregate(EntityTypeBuilder<TAggregate> builder);
 
@@ -100,6 +100,22 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
         }
 
         return property;
+    }
+    private static string GetSchemaName()
+    {
+        var ns = typeof(TAggregate).Namespace
+                 ?? throw new InvalidOperationException(
+                     $"Namespace for {typeof(TAggregate).Name} is null.");
+
+        var parts = ns.Split('.');
+
+        if (parts.Length < 3)
+        {
+            throw new InvalidOperationException(
+                $"Namespace '{ns}' does not contain at least three segments.");
+        }
+
+        return parts[2];
     }
 
 }

@@ -1,5 +1,4 @@
 using Domium.Domain.Abstractions.Aggregate;
-using Domium.Persistence.Abstractions;
 using Domium.Persistence.EntityFrameworkCore.Specifications;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,12 +7,12 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// <summary>
 /// EF Core repository implementation for aggregate roots.
 /// </summary>
-public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
+public class EfRepository<TAggregate, TId> 
     where TAggregate : class, IAggregateRoot<TId>
     where TId : IAggregateId
 {
     private readonly DbContext _dbContext;
-    private readonly DbSet<TAggregate> _dbSet;
+    protected readonly DbSet<TAggregate> _dbSet;
 
     public EfRepository(DbContext dbContext)
     {
@@ -21,7 +20,7 @@ public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
         _dbSet = _dbContext.Set<TAggregate>();
     }
 
-    public async Task<TAggregate?> GetByIdAsync(
+    protected async Task<TAggregate?> GetByIdAsync(
         TId id,
         CancellationToken cancellationToken = default)
     {
@@ -33,7 +32,7 @@ public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
         return await _dbSet.FindAsync(new object?[] { id }, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<TAggregate>> FindAsync(
+    protected async Task<IReadOnlyList<TAggregate>> FindAsync(
         ISpecification<TAggregate> specification,
         CancellationToken cancellationToken = default)
     {
@@ -41,7 +40,7 @@ public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
         return await query.ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<bool> AnyAsync(
+    protected async Task<bool> AnyAsync(
         ISpecification<TAggregate> specification,
         CancellationToken cancellationToken = default)
     {
@@ -49,7 +48,7 @@ public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
         return await query.AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<int> CountAsync(
+    protected async Task<int> CountAsync(
         ISpecification<TAggregate> specification,
         CancellationToken cancellationToken = default)
     {
@@ -57,7 +56,7 @@ public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
         return await query.CountAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task AddAsync(
+    protected async Task AddAsync(
         TAggregate aggregate,
         CancellationToken cancellationToken = default)
     {
@@ -69,20 +68,7 @@ public class EfRepository<TAggregate, TId> : IEfRepository<TAggregate, TId>
         await _dbSet.AddAsync(aggregate, cancellationToken).ConfigureAwait(false);
     }
 
-    public Task UpdateAsync(
-        TAggregate aggregate,
-        CancellationToken cancellationToken = default)
-    {
-        if (aggregate == null)
-        {
-            throw new ArgumentNullException(nameof(aggregate));
-        }
-
-        _dbSet.Update(aggregate);
-        return Task.CompletedTask;
-    }
-
-    public Task RemoveAsync(
+    protected Task RemoveAsync(
         TAggregate aggregate,
         CancellationToken cancellationToken = default)
     {

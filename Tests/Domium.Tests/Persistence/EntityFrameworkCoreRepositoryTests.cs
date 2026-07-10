@@ -1,6 +1,5 @@
 using Domium.Application.Abstractions.Events;
 using Domium.Domain;
-using Domium.Domain.Abstractions.Aggregate;
 using Domium.Domain.Abstractions.DomainService;
 using Domium.Domain.Abstractions.Entity;
 using Domium.Eventing;
@@ -47,7 +46,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
                 .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 
         await using var provider = services.BuildServiceProvider();
-        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
         var id = new CustomerId(Guid.NewGuid());
 
@@ -62,7 +60,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
     public async Task Repository_applies_specifications()
     {
         await using var provider = CreateProvider();
-        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
 
         await unitOfWork.BeginAsync();
@@ -113,7 +110,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
     public async Task UnitOfWork_saves_domain_event_handler_changes_before_commit()
     {
         await using var provider = CreateProviderWithDomainEventHandler();
-        var repository = provider.GetRequiredService<IEfRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
         var customer = new Customer(
             new CustomerId(Guid.NewGuid()),
