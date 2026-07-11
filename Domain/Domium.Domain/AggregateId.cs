@@ -21,8 +21,6 @@ public abstract class AggregateId<T> : ValueObject, IAggregateId<T>
 
     public T Value { get; }
 
-    object IAggregateId.Value => Value!;
-
     protected override IEnumerable<object?> GetEqualityComponents()
     {
         yield return Value;
