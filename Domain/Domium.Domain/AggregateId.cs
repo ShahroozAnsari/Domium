@@ -2,10 +2,6 @@ using Domium.Domain.Abstractions.Aggregate;
 
 namespace Domium.Domain;
 
-/// <summary>
-/// Base type for strongly typed aggregate identifiers.
-/// </summary>
-/// <typeparam name="T">The primitive identifier value type.</typeparam>
 public abstract class AggregateId<T> : ValueObject, IAggregateId<T>
 {
     protected AggregateId(T value)

@@ -1,15 +1,17 @@
 using Domium.Domain.Abstractions.Aggregate;
 using Domium.Persistence.EntityFrameworkCore.Specifications;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace Domium.Persistence.EntityFrameworkCore;
 
 /// <summary>
 /// EF Core repository implementation for aggregate roots.
 /// </summary>
-public class EfRepository<TAggregate, TId> 
+public class EfRepository<TAggregate, TId>
     where TAggregate : class, IAggregateRoot<TId>
     where TId : IAggregateId
+
 {
     private readonly DomiumDbContext _dbContext;
     protected readonly DbSet<TAggregate> _dbSet;
@@ -20,62 +22,49 @@ public class EfRepository<TAggregate, TId>
         _dbSet = _dbContext.Set<TAggregate>();
     }
 
-    protected async Task<TAggregate?> GetByIdAsync(
+    protected Task<TAggregate?> GetByIdAsync(
         TId id,
         CancellationToken cancellationToken = default)
     {
-        if (id == null)
-        {
-            throw new ArgumentNullException(nameof(id));
-        }
-
-        return await _dbSet.FindAsync(new object?[] { id }, cancellationToken).ConfigureAwait(false);
+        return _dbSet.FindAsync([id], cancellationToken).AsTask();
     }
 
     protected async Task<IReadOnlyList<TAggregate>> FindAsync(
-        ISpecification<TAggregate> specification,
-        CancellationToken cancellationToken = default)
+       Expression<Func<TAggregate, bool>> expression,
+       CancellationToken cancellationToken = default)
     {
-        var query = EfSpecificationEvaluator.GetQuery(_dbSet.AsQueryable(), specification);
-        return await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await _dbSet
+            .Where(expression)
+            .ToListAsync(cancellationToken);
     }
 
-    protected async Task<bool> AnyAsync(
-        ISpecification<TAggregate> specification,
+    protected Task<bool> AnyAsync(
+        Expression<Func<TAggregate, bool>> expression,
         CancellationToken cancellationToken = default)
     {
-        var query = EfSpecificationEvaluator.GetQuery(_dbSet.AsQueryable(), specification);
-        return await query.AnyAsync(cancellationToken).ConfigureAwait(false);
+        return _dbSet.AnyAsync(expression, cancellationToken);
     }
 
-    protected async Task<int> CountAsync(
-        ISpecification<TAggregate> specification,
+
+    protected Task<int> CountAsync(
+        Expression<Func<TAggregate, bool>> expression,
         CancellationToken cancellationToken = default)
     {
-        var query = EfSpecificationEvaluator.GetQuery(_dbSet.AsQueryable(), specification);
-        return await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        return _dbSet.CountAsync(expression, cancellationToken);
     }
 
-    protected async Task AddAsync(
+    protected Task AddAsync(
         TAggregate aggregate,
         CancellationToken cancellationToken = default)
     {
-        if (aggregate == null)
-        {
-            throw new ArgumentNullException(nameof(aggregate));
-        }
 
-        await _dbSet.AddAsync(aggregate, cancellationToken).ConfigureAwait(false);
+        return _dbSet.AddAsync(aggregate, cancellationToken).AsTask();
     }
 
     protected Task RemoveAsync(
         TAggregate aggregate,
         CancellationToken cancellationToken = default)
     {
-        if (aggregate == null)
-        {
-            throw new ArgumentNullException(nameof(aggregate));
-        }
 
         _dbSet.Remove(aggregate);
         return Task.CompletedTask;

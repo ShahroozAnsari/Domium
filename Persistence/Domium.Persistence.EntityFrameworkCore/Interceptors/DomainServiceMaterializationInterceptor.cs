@@ -8,85 +8,136 @@ using System.Reflection;
 
 namespace Domium.Persistence.EntityFrameworkCore;
 
-public sealed class DomainServiceMaterializationInterceptor(IServiceProvider serviceProvider) : IMaterializationInterceptor
+public sealed class DomainServiceMaterializationInterceptor(IServiceProvider serviceProvider)
+    : IMaterializationInterceptor
 {
-    private static readonly ConcurrentDictionary<Type, InjectableProperty[]> InjectableProperties = new();
-
-    private readonly Dictionary<Type, object?> _resolvedServices = new();
+    private static readonly ConcurrentDictionary<Type, InjectableMember[]> InjectableMembers = new();
 
     public object InitializedInstance(
         MaterializationInterceptionData materializationData,
         object entity)
     {
-        foreach (var property in InjectableProperties.GetOrAdd(entity.GetType(), BuildInjectableProperties))
+        foreach (var member in InjectableMembers.GetOrAdd(entity.GetType(), BuildInjectableMembers))
         {
-            var service = ResolveService(property.ServiceType);
+            var service = ResolveService(serviceProvider, member.ServiceType);
+
             if (service is not null)
             {
-                property.Set(entity, service);
+                member.Set(entity, service);
             }
         }
 
         return entity;
     }
 
-    private object? ResolveService(Type serviceType)
+    private static object? ResolveService(
+        IServiceProvider serviceProvider,
+        Type serviceType)
     {
-        if (!_resolvedServices.TryGetValue(serviceType, out var service))
+        if (typeof(IEventBus).IsAssignableFrom(serviceType))
         {
-            service = typeof(IEventBus).IsAssignableFrom(serviceType)
-                ? serviceProvider.GetService(serviceType) ?? serviceProvider.GetService<IEventBus>()
-                : typeof(IDomainService).IsAssignableFrom(serviceType)
-                    ? serviceProvider.GetService(serviceType)
-                        ?? serviceProvider.GetServices<IDomainService>().FirstOrDefault(serviceType.IsInstanceOfType)
-                    : null;
-
-            _resolvedServices[serviceType] = service;
+            return serviceProvider.GetService(serviceType)
+                ?? serviceProvider.GetService<IEventBus>();
         }
 
-        return service;
+        if (typeof(IDomainService).IsAssignableFrom(serviceType))
+        {
+            return serviceProvider.GetService(serviceType)
+                ?? serviceProvider
+                    .GetServices<IDomainService>()
+                    .FirstOrDefault(serviceType.IsInstanceOfType);
+        }
+
+        return null;
     }
 
-    private static InjectableProperty[] BuildInjectableProperties(Type entityType)
+    private static InjectableMember[] BuildInjectableMembers(Type entityType)
     {
-        var properties = new List<InjectableProperty>();
+        var members = new List<InjectableMember>();
 
-        for (var type = entityType; type is not null && type != typeof(object); type = type.BaseType)
+        for (var type = entityType;
+             type is not null && type != typeof(object);
+             type = type.BaseType)
         {
-            foreach (var property in type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            foreach (var field in type.GetFields(
+                         BindingFlags.Instance |
+                         BindingFlags.Public |
+                         BindingFlags.NonPublic |
+                         BindingFlags.DeclaredOnly))
             {
-                if (property.SetMethod is null || property.GetIndexParameters().Length != 0)
-                {
+                if (field.IsInitOnly)
                     continue;
-                }
 
-                if (property.PropertyType == typeof(IEventBus) ||
-                    typeof(IEventBus).IsAssignableFrom(property.PropertyType) ||
-                    typeof(IDomainService).IsAssignableFrom(property.PropertyType))
-                {
-                    properties.Add(new InjectableProperty(
-                        property.PropertyType,
-                        BuildSetter(property)));
-                }
+                if (!IsInjectable(field.FieldType))
+                    continue;
+
+                members.Add(new InjectableMember(
+                    field.FieldType,
+                    BuildFieldSetter(field)));
+            }
+
+            foreach (var property in type.GetProperties(
+                         BindingFlags.Instance |
+                         BindingFlags.Public |
+                         BindingFlags.NonPublic |
+                         BindingFlags.DeclaredOnly))
+            {
+                if (property.SetMethod is null)
+                    continue;
+
+                if (property.GetIndexParameters().Length != 0)
+                    continue;
+
+                if (!IsInjectable(property.PropertyType))
+                    continue;
+
+                members.Add(new InjectableMember(
+                    property.PropertyType,
+                    BuildPropertySetter(property)));
             }
         }
 
-        return properties.ToArray();
-
-        static Action<object, object> BuildSetter(PropertyInfo property)
-        {
-            var entity = Expression.Parameter(typeof(object), "entity");
-            var service = Expression.Parameter(typeof(object), "service");
-            var callSetter = Expression.Call(
-                Expression.Convert(entity, property.DeclaringType!),
-                property.SetMethod!,
-                Expression.Convert(service, property.PropertyType));
-
-            return Expression.Lambda<Action<object, object>>(callSetter, entity, service).Compile();
-        }
+        return members.ToArray();
     }
 
-    private sealed record InjectableProperty(
+    private static bool IsInjectable(Type type)
+    {
+        return typeof(IEventBus).IsAssignableFrom(type)
+            || typeof(IDomainService).IsAssignableFrom(type);
+    }
+
+    private static Action<object, object> BuildPropertySetter(PropertyInfo property)
+    {
+        var entity = Expression.Parameter(typeof(object), "entity");
+        var service = Expression.Parameter(typeof(object), "service");
+
+        var setter = Expression.Call(
+            Expression.Convert(entity, property.DeclaringType!),
+            property.SetMethod!,
+            Expression.Convert(service, property.PropertyType));
+
+        return Expression
+            .Lambda<Action<object, object>>(setter, entity, service)
+            .Compile();
+    }
+
+    private static Action<object, object> BuildFieldSetter(FieldInfo field)
+    {
+        var entity = Expression.Parameter(typeof(object), "entity");
+        var service = Expression.Parameter(typeof(object), "service");
+
+        var assign = Expression.Assign(
+            Expression.Field(
+                Expression.Convert(entity, field.DeclaringType!),
+                field),
+            Expression.Convert(service, field.FieldType));
+
+        return Expression
+            .Lambda<Action<object, object>>(assign, entity, service)
+            .Compile();
+    }
+
+    private sealed record InjectableMember(
         Type ServiceType,
         Action<object, object> Set);
 }
