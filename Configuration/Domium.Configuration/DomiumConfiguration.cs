@@ -117,6 +117,7 @@ public static class DomiumConfiguration
             .AsImplementedInterfaces()
             .WithScopedLifetime()
 
+
             .AddClasses(c => c.AssignableTo(typeof(IDomiumQueryCachePolicyProvider)))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
