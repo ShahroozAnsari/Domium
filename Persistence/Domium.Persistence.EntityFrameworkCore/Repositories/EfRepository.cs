@@ -11,10 +11,10 @@ public class EfRepository<TAggregate, TId>
     where TAggregate : class, IAggregateRoot<TId>
     where TId : IAggregateId
 {
-    private readonly DbContext _dbContext;
+    private readonly DomiumDbContext _dbContext;
     protected readonly DbSet<TAggregate> _dbSet;
 
-    public EfRepository(DbContext dbContext)
+    public EfRepository(DomiumDbContext dbContext)
     {
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _dbSet = _dbContext.Set<TAggregate>();

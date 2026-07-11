@@ -7,9 +7,9 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// <summary>
 /// Entity Framework Core implementation of the Domium unit of work.
 /// </summary>
-public sealed class EfUnitOfWork(DbContext dbContext) : IUnitOfWork, IAsyncDisposable
+public sealed class EfUnitOfWork(DomiumDbContext dbContext) : IUnitOfWork, IAsyncDisposable
 {
-    private readonly DbContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+    private readonly DomiumDbContext _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
     private IDbContextTransaction? _transaction;
 
     public async Task BeginAsync(CancellationToken cancellationToken = default)

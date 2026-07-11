@@ -31,5 +31,4 @@ public abstract class AggregateId<T> : ValueObject, IAggregateId<T>
         return Value?.ToString() ?? string.Empty;
     }
 
-    public static implicit operator T(AggregateId<T> id) => id.Value;
 }

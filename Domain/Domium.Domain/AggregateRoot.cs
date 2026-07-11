@@ -6,7 +6,7 @@ namespace Domium.Domain;
 public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     where TId : IAggregateId
 {
-    protected AggregateRoot()
+    internal AggregateRoot()
     {
     }
 
