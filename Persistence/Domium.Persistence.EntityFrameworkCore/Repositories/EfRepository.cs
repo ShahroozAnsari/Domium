@@ -15,6 +15,8 @@ public class EfRepository<TAggregate, TId>
 {
     private readonly DomiumDbContext _dbContext;
     protected readonly DbSet<TAggregate> _dbSet;
+    protected virtual IQueryable<TAggregate> Query
+    => _dbContext.Set<TAggregate>();
 
     public EfRepository(DomiumDbContext dbContext)
     {
@@ -26,14 +28,16 @@ public class EfRepository<TAggregate, TId>
         TId id,
         CancellationToken cancellationToken = default)
     {
-        return _dbSet.FindAsync([id], cancellationToken).AsTask();
+        return Query.FirstOrDefaultAsync(
+             x => x.Id.Equals(id),
+             cancellationToken);
     }
 
     protected async Task<IReadOnlyList<TAggregate>> FindAsync(
        Expression<Func<TAggregate, bool>> expression,
        CancellationToken cancellationToken = default)
     {
-        return await _dbSet
+        return await Query
             .Where(expression)
             .ToListAsync(cancellationToken);
     }
