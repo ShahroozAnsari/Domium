@@ -57,6 +57,6 @@ public sealed class DomiumCacheInvalidationMetadata
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.Trim())
             .Distinct(StringComparer.Ordinal)
-            .ToArray();
+            .ToArray() ?? Array.Empty<string>(); ;
     }
 }

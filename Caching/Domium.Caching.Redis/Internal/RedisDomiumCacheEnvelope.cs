@@ -1,5 +1,6 @@
-using System;
 using Domium.Caching.Abstractions.Models;
+using System;
+using System.Text.Json.Serialization;
 
 namespace Domium.Caching.Redis.Internal;
 
@@ -24,6 +25,7 @@ internal sealed class RedisDomiumCacheEnvelope<T>
     /// <summary>
     /// Gets or sets the invalidation metadata.
     /// </summary>
+    [JsonIgnore]
     public DomiumCacheInvalidationMetadata? Metadata { get; set; }
 
     /// <summary>

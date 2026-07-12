@@ -19,7 +19,8 @@ public sealed class RedisDomiumCacheStore : IDomiumCacheStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
     {
-        WriteIndented = false
+        WriteIndented = false,
+
     };
 
     private readonly IDatabase _database;

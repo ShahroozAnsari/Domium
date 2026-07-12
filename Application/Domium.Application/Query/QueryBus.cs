@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
-using Domium.Observability;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Application.Query;
@@ -19,11 +18,8 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
         var queryName = typeof(TQuery).FullName ?? typeof(TQuery).Name;
         var stopwatch = Stopwatch.StartNew();
 
-        using var activity = DomiumTelemetry.ActivitySource.StartActivity(
-            "domium.query.execute",
-            ActivityKind.Internal);
 
-        activity?.SetTag("domium.query.name", queryName);
+
 
         var handler = serviceProvider.GetRequiredService<IQueryHandler<TQuery, TResult>>();
         var behaviors = serviceProvider
@@ -39,28 +35,9 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
             pipeline = () => behavior.HandleAsync(query, cancellationToken, next);
         }
 
-        try
-        {
-            var result = await pipeline().ConfigureAwait(false);
-            DomiumTelemetry.QueriesExecuted.Add(
-                1,
-                new KeyValuePair<string, object?>("domium.query.name", queryName));
-            return result;
-        }
-        catch (Exception exception)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
-            activity?.SetTag("exception.type", exception.GetType().FullName);
-            activity?.SetTag("exception.message", exception.Message);
-            throw;
-        }
-        finally
-        {
-            stopwatch.Stop();
-            DomiumTelemetry.OperationDuration.Record(
-                stopwatch.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("domium.operation.type", "query"),
-                new KeyValuePair<string, object?>("domium.query.name", queryName));
-        }
+        return await pipeline().ConfigureAwait(false);
+
+
+
     }
 }
