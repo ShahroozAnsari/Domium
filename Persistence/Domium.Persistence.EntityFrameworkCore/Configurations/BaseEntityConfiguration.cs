@@ -1,3 +1,4 @@
+using Domium.Domain;
 using Domium.Domain.Abstractions.Aggregate;
 using Domium.Domain.Abstractions.Entity;
 using Domium.Persistence.Abstractions;
@@ -8,12 +9,24 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Domium.Persistence.EntityFrameworkCore;
 
-public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfiguration<TAggregate>, IEntityConfiguration<TAggregate>
-    where TAggregate : class, IAggregateRoot
+public abstract class BaseDerivedEntityConfiguration<TEntity>
+     : IEntityTypeConfiguration<TEntity>, IEntityConfiguration<TEntity>
+    where TEntity : class, IEntityBase
+{
+    public void Configure(EntityTypeBuilder<TEntity> builder)
+    {
+        ConfigureAggregate(builder);
+    }
+
+    protected abstract void ConfigureAggregate(
+        EntityTypeBuilder<TEntity> builder);
+}
+public abstract class BaseAgregateConfiguration<TEntity> : IEntityTypeConfiguration<TEntity>, IEntityConfiguration<TEntity>
+    where TEntity : class, IEntityBase
 {
     private const int ActorMaxLength = 160;
 
-    public void Configure(EntityTypeBuilder<TAggregate> builder)
+    public void Configure(EntityTypeBuilder<TEntity> builder)
     {
         ConfigureTable(builder);
         ConfigureKey(builder);
@@ -21,22 +34,22 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
         ConfigureDomiumShadowProperties(builder.Metadata.Model.GetEntityTypes());
     }
 
-    protected virtual string TableName => typeof(TAggregate).Name;
+    protected virtual string TableName => typeof(TEntity).Name;
 
     protected virtual string Schema => GetSchemaName();
 
-    protected abstract void ConfigureAggregate(EntityTypeBuilder<TAggregate> builder);
+    protected abstract void ConfigureAggregate(EntityTypeBuilder<TEntity> builder);
 
-    protected virtual void ConfigureTable(EntityTypeBuilder<TAggregate> builder)
+    protected virtual void ConfigureTable(EntityTypeBuilder<TEntity> builder)
     {
         builder.ToTable(TableName, Schema);
     }
 
-    protected virtual void ConfigureKey(EntityTypeBuilder<TAggregate> builder)
+    protected virtual void ConfigureKey(EntityTypeBuilder<TEntity> builder)
     {
         builder.HasKey("Id");
 
-        var idType = typeof(TAggregate).GetProperty("Id")?.PropertyType;
+        var idType = typeof(TEntity).GetProperty("Id")?.PropertyType;
         if (idType is not null && typeof(IAggregateId<Guid>).IsAssignableFrom(idType))
         {
             var converter = (ValueConverter)Activator.CreateInstance(
@@ -103,9 +116,9 @@ public abstract class BaseEntityConfiguration<TAggregate> : IEntityTypeConfigura
     }
     private static string GetSchemaName()
     {
-        var ns = typeof(TAggregate).Namespace
+        var ns = typeof(TEntity).Namespace
                  ?? throw new InvalidOperationException(
-                     $"Namespace for {typeof(TAggregate).Name} is null.");
+                     $"Namespace for {typeof(TEntity).Name} is null.");
 
         var parts = ns.Split('.');
 

@@ -18,9 +18,6 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
         var queryName = typeof(TQuery).FullName ?? typeof(TQuery).Name;
         var stopwatch = Stopwatch.StartNew();
 
-
-
-
         var handler = serviceProvider.GetRequiredService<IQueryHandler<TQuery, TResult>>();
         var behaviors = serviceProvider
             .GetServices<IQueryPipelineBehavior<TQuery, TResult>>()
