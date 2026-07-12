@@ -1,4 +1,3 @@
-using System.Reflection;
 using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Application.Abstractions.Command.Validation;
@@ -29,8 +28,10 @@ using Domium.Tenancy;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyModel;
 using Scrutor;
 using StackExchange.Redis;
+using System.Reflection;
 
 namespace Domium.Configuration;
 
@@ -145,6 +146,12 @@ public static class DomiumConfiguration
     {
         if (options.LoadedAssemblyScanningEnabled)
         {
+            var assemblies = DependencyContext.Default!
+    .RuntimeLibraries
+    .SelectMany(lib => lib.GetDefaultAssemblyNames(DependencyContext.Default))
+    .Select(Assembly.Load)
+    .ToArray();
+            var t = AppDomain.CurrentDomain.GetAssemblies();
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (IsApplicationAssembly(assembly, options))

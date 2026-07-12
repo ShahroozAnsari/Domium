@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Domium.Application.Abstractions.Command;
+namespace Domium.Application.Abstractions.Exceptions;
 
 public class DomiumApplicationException : ApplicationException
 {
