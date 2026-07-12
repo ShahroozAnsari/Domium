@@ -459,7 +459,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
         public string Text { get; private set; }
     }
 
-    private sealed class ConfiguredCustomerConfiguration : BaseEntityConfiguration<ConfiguredCustomer>
+    private sealed class ConfiguredCustomerConfiguration : BaseAggregateEntityConfiguration<ConfiguredCustomer>
     {
         protected override string TableName => "configured_customers";
 
