@@ -1,22 +1,22 @@
-using System.Diagnostics;
 using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Application.Query;
 
+/// <summary>
+/// Resolves the handler and pipeline behaviors for a query and executes them.
+/// Cross-cutting concerns (observability, logging, validation, caching) are pipeline
+/// behaviors — the bus itself only builds and invokes the chain.
+/// </summary>
 public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
 {
-    public async Task<TResult> ExecuteAsync<TQuery, TResult>(
+    public Task<TResult> ExecuteAsync<TQuery, TResult>(
         TQuery query,
         CancellationToken cancellationToken = default)
-        where TQuery : class, IQuery<TResult>
-        where TResult : class
+        where TQuery : IQuery<TResult>
     {
         if (query == null) throw new ArgumentNullException(nameof(query));
-
-        var queryName = typeof(TQuery).FullName ?? typeof(TQuery).Name;
-        var stopwatch = Stopwatch.StartNew();
 
         var handler = serviceProvider.GetRequiredService<IQueryHandler<TQuery, TResult>>();
         var behaviors = serviceProvider
@@ -32,9 +32,6 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
             pipeline = () => behavior.HandleAsync(query, cancellationToken, next);
         }
 
-        return await pipeline().ConfigureAwait(false);
-
-
-
+        return pipeline();
     }
 }

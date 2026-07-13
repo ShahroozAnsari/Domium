@@ -1,6 +1,5 @@
 using Dapper;
 using Domium.Domain.Abstractions.Aggregate;
-using Domium.Domain.Abstractions.DomainService;
 using Domium.Persistence.Abstractions;
 
 namespace Domium.Persistence.Dapper;

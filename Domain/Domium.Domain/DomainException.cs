@@ -1,15 +1,15 @@
-﻿
-namespace Domium.Domain
+namespace Domium.Domain;
+
+/// <summary>
+/// Thrown when a domain invariant or business rule is violated.
+/// </summary>
+public class DomainException : Exception
 {
-    public class DomainException : ApplicationException
+    public DomainException(string message) : base(message)
     {
-        public DomainException(string message) : base(message)
-        {
+    }
 
-        }
-        public DomainException(string message, Exception innerException) : base(message, innerException)
-        {
-
-        }
+    public DomainException(string message, Exception innerException) : base(message, innerException)
+    {
     }
 }

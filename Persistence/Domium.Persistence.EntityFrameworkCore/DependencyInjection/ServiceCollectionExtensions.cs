@@ -1,4 +1,3 @@
-using Domium.Domain.Abstractions.DomainService;
 using Domium.Persistence.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -105,11 +104,13 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<IUnitOfWork, EfUnitOfWork>();
 
         services.TryAddScoped(typeof(IRepository<,>), typeof(EfRepository<,>));
+        services.TryAddScoped(typeof(ISpecificationRepository<,>), typeof(EfRepository<,>));
         services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
         services.TryAddScoped<IDomiumCurrentUserAccessor, NullDomiumCurrentUserAccessor>();
         services.TryAddScoped<SoftDeleteSaveChangesInterceptor>();
         services.TryAddScoped<AuditableSaveChangesInterceptor>();
         services.TryAddScoped<DomainServiceMaterializationInterceptor>();
+        services.TryAddScoped<DomainEventDispatchInterceptor>();
 
         return services;
     }
@@ -121,6 +122,7 @@ public static class ServiceCollectionExtensions
         options.AddInterceptors(
             provider.GetRequiredService<SoftDeleteSaveChangesInterceptor>(),
             provider.GetRequiredService<AuditableSaveChangesInterceptor>(),
-            provider.GetRequiredService<DomainServiceMaterializationInterceptor>());
+            provider.GetRequiredService<DomainServiceMaterializationInterceptor>(),
+            provider.GetRequiredService<DomainEventDispatchInterceptor>());
     }
 }

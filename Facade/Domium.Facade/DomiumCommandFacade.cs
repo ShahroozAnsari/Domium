@@ -11,5 +11,9 @@ public abstract class DomiumCommandFacade(ICommandBus commandBus) : IFacade
         return commandBus.ExecuteAsync(command, cancellationToken);
     }
 
-
+    protected Task<TResult> ExecuteAsync<TCommand, TResult>(TCommand command, CancellationToken cancellationToken = default)
+        where TCommand : ICommand<TResult>
+    {
+        return commandBus.ExecuteAsync<TCommand, TResult>(command, cancellationToken);
+    }
 }

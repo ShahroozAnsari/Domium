@@ -11,6 +11,8 @@ public sealed class DomiumOptions
 
     public bool LoggingEnabled { get; private set; }
 
+    public bool ObservabilityEnabled { get; private set; }
+
     public bool ValidationEnabled { get; private set; }
 
     public bool TransactionsEnabled { get; private set; }
@@ -37,6 +39,13 @@ public sealed class DomiumOptions
     public DomiumOptions UseLogging(bool enabled = true)
     {
         LoggingEnabled = enabled;
+        return this;
+    }
+
+    /// <summary>Adds the activity/metrics pipeline behaviors (outermost) for commands and queries.</summary>
+    public DomiumOptions UseObservability(bool enabled = true)
+    {
+        ObservabilityEnabled = enabled;
         return this;
     }
 

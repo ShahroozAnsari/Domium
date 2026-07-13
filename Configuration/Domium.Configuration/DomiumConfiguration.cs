@@ -9,17 +9,13 @@ using Domium.Application.Command;
 using Domium.Application.Command.Pipelines.Behaviors;
 using Domium.Application.Query;
 using Domium.Application.Query.Pipelines.Behaviors;
-using Domium.Caching.Abstractions.Providers;
-using Domium.Caching.Abstractions.Stores;
-using Domium.Caching.Memory.Stores;
-using Domium.Caching.Providers;
-using Domium.Caching.Redis.Stores;
-using Domium.Caching.Stores;
+using Domium.Caching.Abstractions;
+using Domium.Caching.Memory;
+using Domium.Caching.Redis;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
 using Domium.Facade.Abstractions;
-using Domium.Idempotency;
 using Domium.Idempotency.Abstractions.Models;
 using Domium.Idempotency.Abstractions.Providers;
 using Domium.Idempotency.Providers;
@@ -28,7 +24,6 @@ using Domium.Tenancy;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.DependencyModel;
 using Scrutor;
 using StackExchange.Redis;
 using System.Reflection;
@@ -72,13 +67,19 @@ public static class DomiumConfiguration
             return;
         }
 
-        ValidateNoDuplicateCommandHandlers(assemblies);
-        ValidateNoDuplicateQueryHandlers(assemblies);
+        ValidateNoDuplicateHandlers(assemblies, typeof(ICommandHandler<>), "command");
+        ValidateNoDuplicateHandlers(assemblies, typeof(ICommandHandler<,>), "command");
+        ValidateNoDuplicateHandlers(assemblies, typeof(IQueryHandler<,>), "query");
 
         services.Scan(scan => scan
             .FromAssemblies(assemblies)
 
             .AddClasses(c => c.AssignableTo(typeof(ICommandHandler<>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(ICommandHandler<,>)))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
             .WithScopedLifetime()
@@ -116,15 +117,25 @@ public static class DomiumConfiguration
             .AddClasses(c => c.AssignableTo<IFacade>())
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
-            .WithScopedLifetime()
+            .WithScopedLifetime());
 
+        RegisterApplicationServices(services, options, assemblies);
+    }
 
-            .AddClasses(c => c.AssignableTo(typeof(IDomiumQueryCachePolicyProvider)))
-            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-            .AsImplementedInterfaces()
-            .WithSingletonLifetime());
-
-        var applicationServiceAssemblies = GetApplicationServiceAssemblies(options, assemblies)
+    /// <summary>
+    /// Registers "application services" (repositories, read models, domain-service
+    /// implementations) by convention: a class is registered against an interface only when
+    /// BOTH the class and the interface live in assemblies that were explicitly added via
+    /// <see cref="DomiumOptions.AddApplicationAssembly"/>. This keeps modules isolated —
+    /// an implementation can never be silently bound to another module's (or a third
+    /// party's) interface.
+    /// </summary>
+    private static void RegisterApplicationServices(
+        IServiceCollection services,
+        DomiumOptions options,
+        Assembly[] scannedAssemblies)
+    {
+        var applicationServiceAssemblies = GetApplicationServiceAssemblies(options, scannedAssemblies)
             .Where(assembly => assembly is { IsDynamic: false })
             .Distinct()
             .ToArray();
@@ -134,11 +145,13 @@ public static class DomiumConfiguration
             return;
         }
 
+        var assemblySet = new HashSet<Assembly>(applicationServiceAssemblies);
+
         services.Scan(scan => scan
             .FromAssemblies(applicationServiceAssemblies)
-            .AddClasses(c => c.Where(HasApplicationServiceInterfaces))
+            .AddClasses(c => c.Where(type => GetApplicationServiceInterfaces(type, assemblySet).Any()))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
-            .As(GetApplicationServiceInterfaces)
+            .As(type => GetApplicationServiceInterfaces(type, assemblySet))
             .WithScopedLifetime());
     }
 
@@ -146,12 +159,6 @@ public static class DomiumConfiguration
     {
         if (options.LoadedAssemblyScanningEnabled)
         {
-            var assemblies = DependencyContext.Default!
-    .RuntimeLibraries
-    .SelectMany(lib => lib.GetDefaultAssemblyNames(DependencyContext.Default))
-    .Select(Assembly.Load)
-    .ToArray();
-            var t = AppDomain.CurrentDomain.GetAssemblies();
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (IsApplicationAssembly(assembly, options))
@@ -220,50 +227,18 @@ public static class DomiumConfiguration
                !name.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) &&
                !name.StartsWith("mscorlib", StringComparison.Ordinal) &&
                !name.StartsWith("netstandard", StringComparison.Ordinal) &&
-               !IsDomiumFrameworkAssembly(name);
+               !name.StartsWith("Domium", StringComparison.Ordinal);
     }
 
-    private static bool IsDomiumFrameworkAssembly(string name)
-    {
-        return name == "Domium" ||
-               name == "Domium.Configuration" ||
-               name == "Domium.Domain" ||
-               name == "Domium.Domain.Abstractions" ||
-               name == "Domium.Application" ||
-               name == "Domium.Application.Abstractions" ||
-               name == "Domium.Persistence.Abstractions" ||
-               name == "Domium.Persistence.EntityFrameworkCore" ||
-               name == "Domium.Persistence.Dapper" ||
-               name == "Domium.Caching" ||
-               name == "Domium.Caching.Abstractions" ||
-               name == "Domium.Caching.Memory" ||
-               name == "Domium.Caching.Redis" ||
-               name == "Domium.Eventing" ||
-               name == "Domium.Eventing.Abstractions" ||
-               name == "Domium.Eventing.MassTransit" ||
-               name == "Domium.Facade" ||
-               name == "Domium.Facade.Abstractions" ||
-               name == "Domium.Idempotency" ||
-               name == "Domium.Idempotency.Abstractions" ||
-               name == "Domium.Observability" ||
-               name == "Domium.Observability.OpenTelemetry" ||
-               name == "Domium.Tenancy" ||
-               name == "Domium.Tenancy.Abstractions" ||
-               name == "Domium.Extensions.DependencyInjection";
-    }
-
-    private static bool HasApplicationServiceInterfaces(Type type) =>
-        GetApplicationServiceInterfaces(type).Any();
-
-    private static IEnumerable<Type> GetApplicationServiceInterfaces(Type type)
+    private static IEnumerable<Type> GetApplicationServiceInterfaces(Type type, HashSet<Assembly> assemblySet)
     {
         return type
             .GetInterfaces()
-            .Where(serviceType => IsApplicationServiceInterface(type, serviceType))
+            .Where(serviceType => IsApplicationServiceInterface(serviceType, assemblySet))
             .Distinct();
     }
 
-    private static bool IsApplicationServiceInterface(Type implementationType, Type serviceType)
+    private static bool IsApplicationServiceInterface(Type serviceType, HashSet<Assembly> assemblySet)
     {
         if (serviceType.IsGenericTypeDefinition ||
             serviceType.ContainsGenericParameters)
@@ -271,76 +246,66 @@ public static class DomiumConfiguration
             return false;
         }
 
-        var implementationNamespace = implementationType.Namespace;
-        var serviceNamespace = serviceType.Namespace;
-
-        if (string.IsNullOrWhiteSpace(implementationNamespace) ||
-            string.IsNullOrWhiteSpace(serviceNamespace))
-        {
-            return false;
-        }
-
-        return !serviceNamespace.StartsWith("System", StringComparison.Ordinal) &&
-               !serviceNamespace.StartsWith("Microsoft", StringComparison.Ordinal) &&
-               !serviceNamespace.StartsWith("Domium", StringComparison.Ordinal) &&
-               GetNamespaceRoot(implementationNamespace) == GetNamespaceRoot(serviceNamespace);
-    }
-
-    private static string GetNamespaceRoot(string namespaceName)
-    {
-        var index = namespaceName.IndexOf('.');
-        return index < 0 ? namespaceName : namespaceName[..index];
+        // Only interfaces the application explicitly brought into the scan may be
+        // auto-registered; framework/system/third-party interfaces never match.
+        return assemblySet.Contains(serviceType.Assembly);
     }
 
     private static void RegisterOptionalBehaviors(IServiceCollection services, DomiumOptions options)
     {
+        if (options.ObservabilityEnabled)
+        {
+            // Registered first so the activity span wraps every other behavior and the handler.
+            AddCommandBehavior(services, typeof(ObservabilityCommandBehavior<>), typeof(ObservabilityCommandBehavior<,>));
+            services.TryAddEnumerable(
+                ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(ObservabilityQueryBehavior<,>)));
+        }
+
         if (options.ValidationEnabled)
         {
+            AddCommandBehavior(services, typeof(ValidationCommandBehavior<>), typeof(ValidationCommandBehavior<,>));
             services.TryAddEnumerable(
-                ServiceDescriptor.Scoped(
-                    typeof(ICommandPipelineBehavior<>),
-                    typeof(ValidationCommandBehavior<>)));
-
-            services.TryAddEnumerable(
-                ServiceDescriptor.Scoped(
-                    typeof(IQueryPipelineBehavior<,>),
-                    typeof(ValidationQueryBehavior<,>)));
+                ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(ValidationQueryBehavior<,>)));
         }
 
         if (options.LoggingEnabled)
         {
+            AddCommandBehavior(services, typeof(LoggingCommandBehavior<>), typeof(LoggingCommandBehavior<,>));
             services.TryAddEnumerable(
-                ServiceDescriptor.Scoped(
-                    typeof(ICommandPipelineBehavior<>),
-                    typeof(LoggingCommandBehavior<>)));
-
-            services.TryAddEnumerable(
-                ServiceDescriptor.Scoped(
-                    typeof(IQueryPipelineBehavior<,>),
-                    typeof(LoggingQueryBehavior<,>)));
+                ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>)));
         }
 
         if (options.IdempotencyEnabled)
         {
-            RegisterIdempotencyCacheStore(services, options.IdempotencyOptions.Store);
+            EnsureDomiumCache(services, options.IdempotencyOptions.Store);
             RegisterIdempotency(services, options.IdempotencyOptions);
         }
 
         if (options.TransactionsEnabled)
         {
             ValidateTransactionRegistration(services);
-
-            services.TryAddEnumerable(
-                ServiceDescriptor.Scoped(
-                    typeof(ICommandPipelineBehavior<>),
-                    typeof(TransactionCommandBehavior<>)));
+            AddCommandBehavior(services, typeof(TransactionCommandBehavior<>), typeof(TransactionCommandBehavior<,>));
         }
 
         if (options.CachingEnabled)
         {
-            RegisterQueryCacheStore(services, options.CachingOptions.Store);
-            RegisterCaching(services, options.CachingOptions);
+            ValidateCachingOptions(options.CachingOptions);
+            EnsureDomiumCache(services, options.CachingOptions.Store);
+
+            services.TryAddSingleton(new DomiumQueryCachingOptions
+            {
+                DefaultDuration = options.CachingOptions.DefaultExpiration
+            });
+
+            services.TryAddEnumerable(
+                ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(CachingQueryBehavior<,>)));
         }
+    }
+
+    private static void AddCommandBehavior(IServiceCollection services, Type voidBehavior, Type resultBehavior)
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(ICommandPipelineBehavior<>), voidBehavior));
+        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(ICommandPipelineBehavior<,>), resultBehavior));
     }
 
     private static void RegisterIdempotency(IServiceCollection services, DomiumIdempotencyOptions options)
@@ -363,43 +328,40 @@ public static class DomiumConfiguration
                 typeof(IdempotencyCommandBehavior<>)));
     }
 
-    private static void RegisterCaching(IServiceCollection services, DomiumCachingOptions options)
+    /// <summary>
+    /// Registers the <see cref="IDomiumCache"/> store described by <paramref name="options"/>.
+    /// The first registration wins, so query caching and idempotency share one store when
+    /// they use the same provider.
+    /// </summary>
+    private static void EnsureDomiumCache(IServiceCollection services, DomiumCacheStoreOptions options)
     {
-        services.TryAddSingleton<DomiumQueryCachePolicyProvider>();
-        services.TryAddSingleton<IDomiumQueryCachePolicyProvider>(
-            provider => provider.GetRequiredService<DomiumQueryCachePolicyProvider>());
-        services.TryAddSingleton<IDomiumQueryCachePolicyRegistry>(
-            provider => provider.GetRequiredService<DomiumQueryCachePolicyProvider>());
-        services.TryAddScoped<IDomiumCacheScopeProvider, DefaultDomiumCacheScopeProvider>();
-        services.TryAddSingleton<IDomiumCacheInvalidationMetadataProvider, DefaultDomiumCacheInvalidationMetadataProvider>();
-        services.TryAddSingleton<IDomiumCacheEntryOptionsFactory>(
-            _ => new DefaultDomiumCacheEntryOptionsFactory(options.DefaultExpiration));
+        ValidateCacheStoreOptions(options, "Domium cache");
 
-        services.TryAddEnumerable(
-            ServiceDescriptor.Scoped(
-                typeof(IQueryPipelineBehavior<,>),
-                typeof(CachingQueryBehavior<,>)));
-    }
+        if (options.Provider == DomiumCacheProvider.Memory)
+        {
+            services.AddMemoryCache();
+            services.TryAddSingleton<IDomiumCache>(
+                provider => new MemoryDomiumCache(provider.GetRequiredService<IMemoryCache>()));
+            return;
+        }
 
-    private static void RegisterQueryCacheStore(IServiceCollection services, DomiumCacheStoreOptions options)
-    {
-        ValidateCacheStoreOptions(options, "Query caching");
+        if (options.Provider == DomiumCacheProvider.Redis)
+        {
+            if (options.RedisConnectionFactory is not null)
+            {
+                services.TryAddSingleton<IConnectionMultiplexer>(options.RedisConnectionFactory);
+            }
+            else
+            {
+                var connectionString = options.RedisConnectionString;
+                services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
+            }
 
-        services.AddMemoryCache();
-        services.TryAddSingleton<IDomiumCacheKeyFactory, DefaultDomiumCacheKeyFactory>();
-        services.TryAddSingleton<IDomiumCacheKeyProvider, DefaultDomiumCacheKeyProvider>();
-        services.TryAddSingleton<IDomiumQueryCacheStore>(
-            provider => new DomiumQueryCacheStore(CreateCacheStore(provider, options)));
-    }
+            services.AddDomiumRedisCache();
+            return;
+        }
 
-    private static void RegisterIdempotencyCacheStore(IServiceCollection services, DomiumCacheStoreOptions options)
-    {
-        ValidateCacheStoreOptions(options, "Idempotency");
-
-        services.AddMemoryCache();
-        services.TryAddSingleton<IDomiumCacheKeyFactory, DefaultDomiumCacheKeyFactory>();
-        services.TryAddSingleton<IDomiumIdempotencyCacheStore>(
-            provider => new DomiumIdempotencyCacheStore(CreateCacheStore(provider, options)));
+        throw new InvalidOperationException($"Unsupported cache provider '{options.Provider}'.");
     }
 
     private static void ValidateCachingOptions(DomiumCachingOptions options)
@@ -450,29 +412,6 @@ public static class DomiumConfiguration
         ValidateCacheStoreOptions(options.Store, "Idempotency");
     }
 
-    private static IDomiumCacheStore CreateCacheStore(
-        IServiceProvider provider,
-        DomiumCacheStoreOptions options)
-    {
-        if (options.Provider == DomiumCacheProvider.Memory)
-        {
-            return new MemoryDomiumCacheStore(provider.GetRequiredService<IMemoryCache>());
-        }
-
-        if (options.Provider == DomiumCacheProvider.Redis)
-        {
-            if (options.RedisConnectionFactory != null)
-            {
-                return new RedisDomiumCacheStore(options.RedisConnectionFactory(provider));
-            }
-
-            return new OwnedRedisDomiumCacheStore(
-                ConnectionMultiplexer.Connect(options.RedisConnectionString));
-        }
-
-        throw new InvalidOperationException($"Unsupported cache provider '{options.Provider}'.");
-    }
-
     private static void ValidateTransactionRegistration(IServiceCollection services)
     {
         var hasUnitOfWork = services.Any(service => service.ServiceType == typeof(IUnitOfWork));
@@ -486,13 +425,17 @@ public static class DomiumConfiguration
 
     private static void ValidateHandlers(IServiceCollection services)
     {
-        ValidateNoDuplicateRegisteredCommandHandlers(services);
-        ValidateNoDuplicateRegisteredQueryHandlers(services);
+        ValidateNoDuplicateRegisteredHandlers(services, typeof(ICommandHandler<>), "command");
+        ValidateNoDuplicateRegisteredHandlers(services, typeof(ICommandHandler<,>), "command");
+        ValidateNoDuplicateRegisteredHandlers(services, typeof(IQueryHandler<,>), "query");
     }
 
-    private static void ValidateNoDuplicateCommandHandlers(IEnumerable<Assembly> assemblies)
+    private static void ValidateNoDuplicateHandlers(
+        IEnumerable<Assembly> assemblies,
+        Type openHandlerType,
+        string kind)
     {
-        var duplicates = GetClosedServiceImplementations(assemblies, typeof(ICommandHandler<>))
+        var duplicates = GetClosedServiceImplementations(assemblies, openHandlerType)
             .GroupBy(pair => pair.ServiceType)
             .Where(group => group.Count() > 1)
             .Select(group => FormatDuplicateHandler(group.Key, group.Select(pair => pair.ImplementationType)))
@@ -501,22 +444,27 @@ public static class DomiumConfiguration
         if (duplicates.Length > 0)
         {
             throw new InvalidOperationException(
-                "Domium found multiple command handlers: " + string.Join("; ", duplicates));
+                $"Domium found multiple {kind} handlers: " + string.Join("; ", duplicates));
         }
     }
 
-    private static void ValidateNoDuplicateQueryHandlers(IEnumerable<Assembly> assemblies)
+    private static void ValidateNoDuplicateRegisteredHandlers(
+        IServiceCollection services,
+        Type openHandlerType,
+        string kind)
     {
-        var duplicates = GetClosedServiceImplementations(assemblies, typeof(IQueryHandler<,>))
-            .GroupBy(pair => pair.ServiceType)
-            .Where(group => group.Count() > 1)
-            .Select(group => FormatDuplicateHandler(group.Key, group.Select(pair => pair.ImplementationType)))
+        var duplicates = services
+            .Where(d => d.ServiceType.IsGenericType &&
+                        d.ServiceType.GetGenericTypeDefinition() == openHandlerType)
+            .GroupBy(d => d.ServiceType)
+            .Where(g => g.Count() > 1)
+            .Select(g => FormatDuplicateRegistration(g.Key, g))
             .ToArray();
 
         if (duplicates.Length > 0)
         {
             throw new InvalidOperationException(
-                "Domium found multiple query handlers: " + string.Join("; ", duplicates));
+                $"Domium found multiple {kind} handlers: " + string.Join(", ", duplicates));
         }
     }
 
@@ -569,40 +517,6 @@ public static class DomiumConfiguration
         return $"{serviceType.FullName ?? serviceType.Name} ({string.Join(", ", implementations)})";
     }
 
-    private static void ValidateNoDuplicateRegisteredCommandHandlers(IServiceCollection services)
-    {
-        var duplicates = services
-            .Where(d => d.ServiceType.IsGenericType &&
-                        d.ServiceType.GetGenericTypeDefinition() == typeof(ICommandHandler<>))
-            .GroupBy(d => d.ServiceType)
-            .Where(g => g.Count() > 1)
-            .Select(g => FormatDuplicateRegistration(g.Key, g))
-            .ToArray();
-
-        if (duplicates.Length > 0)
-        {
-            throw new InvalidOperationException(
-                "Domium found multiple command handlers: " + string.Join(", ", duplicates));
-        }
-    }
-
-    private static void ValidateNoDuplicateRegisteredQueryHandlers(IServiceCollection services)
-    {
-        var duplicates = services
-            .Where(d => d.ServiceType.IsGenericType &&
-                        d.ServiceType.GetGenericTypeDefinition() == typeof(IQueryHandler<,>))
-            .GroupBy(d => d.ServiceType)
-            .Where(g => g.Count() > 1)
-            .Select(g => FormatDuplicateRegistration(g.Key, g))
-            .ToArray();
-
-        if (duplicates.Length > 0)
-        {
-            throw new InvalidOperationException(
-                "Domium found multiple query handlers: " + string.Join(", ", duplicates));
-        }
-    }
-
     private static string FormatDuplicateRegistration(
         Type serviceType,
         IEnumerable<ServiceDescriptor> descriptors)
@@ -631,72 +545,5 @@ public static class DomiumConfiguration
         return descriptor.ImplementationFactory is not null
             ? "<factory>"
             : "<unknown>";
-    }
-
-    private sealed class OwnedRedisDomiumCacheStore(IConnectionMultiplexer connectionMultiplexer)
-        : IDomiumCacheStore, IDisposable
-    {
-        private readonly IConnectionMultiplexer _connectionMultiplexer = connectionMultiplexer ?? throw new ArgumentNullException(nameof(connectionMultiplexer));
-        private readonly RedisDomiumCacheStore _inner = new(connectionMultiplexer);
-
-        public Task<Domium.Caching.Abstractions.Results.DomiumCacheResult<T>> TryGetAsync<T>(
-            string key,
-            CancellationToken cancellationToken)
-        {
-            return _inner.TryGetAsync<T>(key, cancellationToken);
-        }
-
-        public Task SetAsync<T>(
-            string key,
-            T value,
-            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
-            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
-        {
-            return _inner.SetAsync(key, value, options, invalidationMetadata, cancellationToken);
-        }
-
-        public Task<bool> TrySetAsync<T>(
-            string key,
-            T value,
-            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
-            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
-        {
-            return _inner.TrySetAsync(key, value, options, invalidationMetadata, cancellationToken);
-        }
-
-        public Task RemoveAsync(
-            string key,
-            CancellationToken cancellationToken)
-        {
-            return _inner.RemoveAsync(key, cancellationToken);
-        }
-
-        public Task RemoveByTagAsync(
-            string tag,
-            CancellationToken cancellationToken)
-        {
-            return _inner.RemoveByTagAsync(tag, cancellationToken);
-        }
-
-        public Task RemoveByEntityKeyAsync(
-            string entityKey,
-            CancellationToken cancellationToken)
-        {
-            return _inner.RemoveByEntityKeyAsync(entityKey, cancellationToken);
-        }
-
-        public Task RemoveByGroupAsync(
-            string group,
-            CancellationToken cancellationToken)
-        {
-            return _inner.RemoveByGroupAsync(group, cancellationToken);
-        }
-
-        public void Dispose()
-        {
-            _connectionMultiplexer.Dispose();
-        }
     }
 }

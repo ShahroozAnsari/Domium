@@ -1,60 +1,19 @@
-
 using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
-using Domium.Caching.Abstractions.Providers;
-using Domium.Caching.Abstractions.Stores;
+using Domium.Caching.Abstractions;
 
 namespace Domium.Application.Query.Pipelines.Behaviors;
 
 /// <summary>
-/// Provides cache-aware execution for queries when a cache policy exists
-/// for the current query type.
+/// Caches results of queries that opt in by implementing <see cref="ICacheableQuery"/>.
+/// The key is derived from the query type and its JSON payload; the duration and
+/// invalidation tags come from the query itself (falling back to the configured default).
 /// </summary>
-/// <typeparam name="TQuery">The query type.</typeparam>
-/// <typeparam name="TResult">The query result type.</typeparam>
-public sealed class CachingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavior<TQuery, TResult>
-    where TQuery : class, IQuery<TResult>
-    where TResult : class
+public sealed class CachingQueryBehavior<TQuery, TResult>(
+    IDomiumCache cache,
+    DomiumQueryCachingOptions options) : IQueryPipelineBehavior<TQuery, TResult>
+    where TQuery : IQuery<TResult>
 {
-    private readonly IDomiumQueryCacheStore _cacheStore;
-    private readonly IDomiumCacheKeyProvider _cacheKeyProvider;
-    private readonly IDomiumQueryCachePolicyProvider _policyProvider;
-    private readonly IDomiumCacheScopeProvider _scopeProvider;
-    private readonly IDomiumCacheInvalidationMetadataProvider _invalidationMetadataProvider;
-    private readonly IDomiumCacheEntryOptionsFactory _entryOptionsFactory;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CachingQueryBehavior{TQuery, TResult}"/> class.
-    /// </summary>
-    /// <param name="cacheStore">The cache store.</param>
-    /// <param name="cacheKeyProvider">The cache key provider.</param>
-    /// <param name="policyProvider">The cache policy provider.</param>
-    /// <param name="scopeProvider">The cache scope provider.</param>
-    /// <param name="invalidationMetadataProvider">The invalidation metadata provider.</param>
-    /// <param name="entryOptionsFactory">The cache entry options factory.</param>
-    public CachingQueryBehavior(
-        IDomiumQueryCacheStore cacheStore,
-        IDomiumCacheKeyProvider cacheKeyProvider,
-        IDomiumQueryCachePolicyProvider policyProvider,
-        IDomiumCacheScopeProvider scopeProvider,
-        IDomiumCacheInvalidationMetadataProvider invalidationMetadataProvider,
-        IDomiumCacheEntryOptionsFactory entryOptionsFactory)
-    {
-        _cacheStore = cacheStore ?? throw new ArgumentNullException(nameof(cacheStore));
-        _cacheKeyProvider = cacheKeyProvider ?? throw new ArgumentNullException(nameof(cacheKeyProvider));
-        _policyProvider = policyProvider ?? throw new ArgumentNullException(nameof(policyProvider));
-        _scopeProvider = scopeProvider ?? throw new ArgumentNullException(nameof(scopeProvider));
-        _invalidationMetadataProvider = invalidationMetadataProvider ?? throw new ArgumentNullException(nameof(invalidationMetadataProvider));
-        _entryOptionsFactory = entryOptionsFactory ?? throw new ArgumentNullException(nameof(entryOptionsFactory));
-    }
-
-    /// <summary>
-    /// Executes the query using the configured cache policy for the query type.
-    /// </summary>
-    /// <param name="query">The query instance.</param>
-    /// <param name="next">The next delegate in the pipeline.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The cached or computed query result.</returns>
     public async Task<TResult> HandleAsync(
         TQuery query,
         CancellationToken cancellationToken,
@@ -63,45 +22,30 @@ public sealed class CachingQueryBehavior<TQuery, TResult> : IQueryPipelineBehavi
         if (query == null) throw new ArgumentNullException(nameof(query));
         if (next == null) throw new ArgumentNullException(nameof(next));
 
-        var policy = _policyProvider.GetPolicy(typeof(TQuery));
-
-        if (policy is null || !policy.Enabled)
+        if (query is not ICacheableQuery cacheable)
         {
             return await next().ConfigureAwait(false);
         }
 
-        var scope = _scopeProvider.GetScope(policy);
+        var key = DomiumCacheKeyBuilder.BuildQueryKey(query);
 
-        var cacheKey = _cacheKeyProvider.CreateKey(query, policy, scope);
-
-        var cached = await _cacheStore
-            .TryGetAsync<TResult>(cacheKey, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (cached.HasValue)
+        var cached = await cache.GetAsync<TResult>(key, cancellationToken).ConfigureAwait(false);
+        if (cached.Found)
         {
             return cached.Value!;
         }
 
         var result = await next().ConfigureAwait(false);
 
-        if (result is null && !policy.CacheNullValues)
+        if (result is not null)
         {
-            return result!;
+            var entryOptions = new DomiumCacheEntryOptions(
+                cacheable.Duration ?? options.DefaultDuration,
+                cacheable.Tags);
+
+            await cache.SetAsync(key, result, entryOptions, cancellationToken).ConfigureAwait(false);
         }
 
-        var invalidationMetadata = _invalidationMetadataProvider.GetMetadata(query, policy);
-        var entryOptions = _entryOptionsFactory.Create(policy);
-
-        await _cacheStore.SetAsync(
-            cacheKey,
-            result,
-            entryOptions,
-            invalidationMetadata,
-            cancellationToken).ConfigureAwait(false);
-
-
-        return result!;
-
+        return result;
     }
 }

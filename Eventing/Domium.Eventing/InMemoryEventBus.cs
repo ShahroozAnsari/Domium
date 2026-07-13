@@ -1,5 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Reflection;
+using System.Linq.Expressions;
 using Domium.Application.Abstractions.Events;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing.Abstractions;
@@ -12,11 +13,19 @@ namespace Domium.Eventing;
 
 /// <summary>
 /// In-memory event bus that invokes handlers registered in the current service provider.
+/// Handler invocation goes through compiled delegates cached per event type — no per-publish
+/// reflection — and handler exceptions surface with their original stack trace.
 /// </summary>
 public sealed class InMemoryEventBus(
     IServiceProvider serviceProvider,
     IExternalEventPublisher externalEventPublisher) : IEventBus
 {
+    private static readonly ConcurrentDictionary<(Type OpenHandlerType, Type EventType), HandlerInvoker> Invokers = new();
+    private static readonly ConcurrentDictionary<Type, ExternalPublishInvoker> ExternalInvokers = new();
+
+    private delegate Task HandlerInvoker(object handler, IDomiumEvent @event, CancellationToken cancellationToken);
+    private delegate Task ExternalPublishInvoker(IExternalEventPublisher publisher, IExternalEvent @event, CancellationToken cancellationToken);
+
     public async Task PublishAsync<TEvent>(
         TEvent @event,
         CancellationToken cancellationToken = default)
@@ -38,30 +47,21 @@ public sealed class InMemoryEventBus(
 
         if (@event is IInternalEvent)
         {
-            await DispatchAsync(
-                typeof(IInternalEventHandler<>),
-                nameof(IInternalEventHandler<IInternalEvent>.HandleAsync),
-                @event,
-                cancellationToken).ConfigureAwait(false);
+            await DispatchAsync(typeof(IInternalEventHandler<>), @event, cancellationToken).ConfigureAwait(false);
+            DomiumTelemetry.InternalEventsPublished.Add(
+                1,
+                new KeyValuePair<string, object?>("domium.event.name", eventName));
         }
 
         if (@event is IDomainEvent)
         {
-            await DispatchAsync(
-                typeof(IDomainEventHandler<>),
-                nameof(IDomainEventHandler<IDomainEvent>.HandleAsync),
-                @event,
-                cancellationToken).ConfigureAwait(false);
+            await DispatchAsync(typeof(IDomainEventHandler<>), @event, cancellationToken).ConfigureAwait(false);
         }
 
         if (@event is IExternalEvent externalEvent)
         {
             await PublishExternalAsync(externalEvent, cancellationToken).ConfigureAwait(false);
         }
-
-        DomiumTelemetry.InternalEventsPublished.Add(
-            1,
-            new KeyValuePair<string, object?>("domium.event.name", eventName));
     }
 
     public async Task PublishAsync(
@@ -82,70 +82,74 @@ public sealed class InMemoryEventBus(
 
     private async Task DispatchAsync(
         Type openHandlerType,
-        string handleMethodName,
         IDomiumEvent @event,
         CancellationToken cancellationToken)
     {
+        var invoker = Invokers.GetOrAdd((openHandlerType, @event.GetType()), BuildHandlerInvoker);
         var handlerType = openHandlerType.MakeGenericType(@event.GetType());
-        var handlers = serviceProvider.GetServices(handlerType);
-        var handleMethod = handlerType.GetMethod(handleMethodName);
 
-        if (handleMethod is null)
-        {
-            return;
-        }
-
-        foreach (var handler in handlers)
+        foreach (var handler in serviceProvider.GetServices(handlerType))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            Task? task;
-
-            try
+            if (handler is not null)
             {
-                task = (Task?)handleMethod.Invoke(handler, new object[] { @event, cancellationToken });
-            }
-            catch (TargetInvocationException exception) when (exception.InnerException is not null)
-            {
-                throw exception.InnerException;
-            }
-
-            if (task is not null)
-            {
-                await task.ConfigureAwait(false);
+                await invoker(handler, @event, cancellationToken).ConfigureAwait(false);
             }
         }
     }
 
-    private async Task PublishExternalAsync(
-        IExternalEvent externalEvent,
-        CancellationToken cancellationToken)
+    private Task PublishExternalAsync(IExternalEvent externalEvent, CancellationToken cancellationToken)
+    {
+        var invoker = ExternalInvokers.GetOrAdd(externalEvent.GetType(), BuildExternalInvoker);
+        return invoker(externalEventPublisher, externalEvent, cancellationToken);
+    }
+
+    /// <summary>
+    /// Compiles: (handler, event, ct) => ((THandler)handler).HandleAsync((TEvent)event, ct).
+    /// </summary>
+    private static HandlerInvoker BuildHandlerInvoker((Type OpenHandlerType, Type EventType) key)
+    {
+        var handlerType = key.OpenHandlerType.MakeGenericType(key.EventType);
+        var handleMethod = handlerType.GetMethod("HandleAsync")
+            ?? throw new InvalidOperationException($"{handlerType.Name} does not define HandleAsync.");
+
+        var handler = Expression.Parameter(typeof(object), "handler");
+        var @event = Expression.Parameter(typeof(IDomiumEvent), "event");
+        var cancellationToken = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
+
+        var call = Expression.Call(
+            Expression.Convert(handler, handlerType),
+            handleMethod,
+            Expression.Convert(@event, key.EventType),
+            cancellationToken);
+
+        return Expression
+            .Lambda<HandlerInvoker>(call, handler, @event, cancellationToken)
+            .Compile();
+    }
+
+    /// <summary>
+    /// Compiles: (publisher, event, ct) => publisher.PublishAsync&lt;TEvent&gt;((TEvent)event, ct).
+    /// </summary>
+    private static ExternalPublishInvoker BuildExternalInvoker(Type eventType)
     {
         var publishMethod = typeof(IExternalEventPublisher)
-            .GetMethod(nameof(IExternalEventPublisher.PublishAsync))?
-            .MakeGenericMethod(externalEvent.GetType());
+            .GetMethod(nameof(IExternalEventPublisher.PublishAsync))!
+            .MakeGenericMethod(eventType);
 
-        if (publishMethod is null)
-        {
-            return;
-        }
+        var publisher = Expression.Parameter(typeof(IExternalEventPublisher), "publisher");
+        var @event = Expression.Parameter(typeof(IExternalEvent), "event");
+        var cancellationToken = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
-        Task? task;
+        var call = Expression.Call(
+            publisher,
+            publishMethod,
+            Expression.Convert(@event, eventType),
+            cancellationToken);
 
-        try
-        {
-            task = (Task?)publishMethod.Invoke(
-                externalEventPublisher,
-                new object[] { externalEvent, cancellationToken });
-        }
-        catch (TargetInvocationException exception) when (exception.InnerException is not null)
-        {
-            throw exception.InnerException;
-        }
-
-        if (task is not null)
-        {
-            await task.ConfigureAwait(false);
-        }
+        return Expression
+            .Lambda<ExternalPublishInvoker>(call, publisher, @event, cancellationToken)
+            .Compile();
     }
 }

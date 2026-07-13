@@ -1,19 +1,15 @@
-﻿using Domium.Application.Abstractions.Query;
-using System;
-using System.Collections.Generic;
-using System.Text;
+using Domium.Application.Abstractions.Query;
+using Domium.Facade.Abstractions;
 
-namespace Domium.Facade
+namespace Domium.Facade;
+
+public abstract class DomiumQueryFacade(IQueryBus queryBus) : IFacade
 {
-    public class DomiumQueryFacade(IQueryBus queryBus)
-    {
-        protected Task<TResult> QueryAsync<TQuery, TResult>(
+    protected Task<TResult> QueryAsync<TQuery, TResult>(
         TQuery query,
         CancellationToken cancellationToken = default)
-        where TQuery : class, IQuery<TResult>
-        where TResult : class
-        {
-            return queryBus.ExecuteAsync<TQuery, TResult>(query, cancellationToken);
-        }
+        where TQuery : IQuery<TResult>
+    {
+        return queryBus.ExecuteAsync<TQuery, TResult>(query, cancellationToken);
     }
 }

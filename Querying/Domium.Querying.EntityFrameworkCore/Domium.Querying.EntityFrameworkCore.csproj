@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Domium.Querying.Abstractions\Domium.Querying.Abstractions.csproj" />
+    <ProjectReference Include="..\Domium.Querying\Domium.Querying.csproj" />
   </ItemGroup>
 
 </Project>
+

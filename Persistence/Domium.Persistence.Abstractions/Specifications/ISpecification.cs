@@ -14,8 +14,11 @@ public interface ISpecification<T>
 
     Expression<Func<T, bool>>? CursorCriteria { get; }
 
+    IReadOnlyList<Expression<Func<T, object>>> Includes { get; }
+
+    int? Skip { get; }
+
     int? Take { get; }
 
     bool IsPagingEnabled { get; }
 }
-

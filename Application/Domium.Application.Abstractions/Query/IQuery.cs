@@ -1,5 +1,10 @@
-﻿namespace Domium.Application.Abstractions.Query;
+namespace Domium.Application.Abstractions.Query;
 
-public interface IQuery<out TResult> where TResult : class
+/// <summary>
+/// A read-only operation. <typeparamref name="TResult"/> is unconstrained so queries can
+/// return nullable references (e.g. <c>IQuery&lt;CustomerDto?&gt;</c>) and value types
+/// (e.g. <c>IQuery&lt;int&gt;</c>).
+/// </summary>
+public interface IQuery<out TResult>
 {
 }

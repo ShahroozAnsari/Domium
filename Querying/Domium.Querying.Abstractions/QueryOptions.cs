@@ -42,7 +42,7 @@ public sealed class QueryOptions
     /// </summary>
     public string? Filters { get; set; }
 
-    /// <summary>Field to sort by, optionally prefixed with "-" for descending. Example: "-CreatedAt".</summary>
+    /// <summary>One or more comma-separated sort keys, each optionally prefixed with "-" for descending. Example: "Name,-CreatedAt".</summary>
     public string? SortBy { get; set; }
 
     public int Page { get; set; } = 1;

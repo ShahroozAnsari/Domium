@@ -32,6 +32,11 @@ public static class EfSpecificationEvaluator
             query = query.Where(specification.CursorCriteria);
         }
 
+        foreach (var include in specification.Includes)
+        {
+            query = query.Include(include);
+        }
+
         if (specification.OrderBy is not null)
         {
             query = query.OrderBy(specification.OrderBy);
@@ -41,9 +46,14 @@ public static class EfSpecificationEvaluator
             query = query.OrderByDescending(specification.OrderByDescending);
         }
 
-        if (specification.IsPagingEnabled)
+        if (specification.Skip is int skip)
         {
-            query = query.Take(specification.Take!.Value);
+            query = query.Skip(skip);
+        }
+
+        if (specification.Take is int take)
+        {
+            query = query.Take(take);
         }
 
         return query;

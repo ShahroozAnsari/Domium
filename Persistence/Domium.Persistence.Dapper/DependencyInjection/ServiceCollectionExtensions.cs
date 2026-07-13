@@ -1,4 +1,3 @@
-using Domium.Domain.Abstractions.DomainService;
 using Domium.Persistence.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

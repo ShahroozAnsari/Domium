@@ -1,17 +1,11 @@
 using System;
 using Domium.Application.Abstractions.Command;
-using Domium.Caching.Abstractions.Models;
-using Domium.Caching.Abstractions.Providers;
 using Domium.Idempotency.Abstractions.Providers;
 
 namespace Domium.Idempotency.Providers;
 
-public sealed class DefaultDomiumIdempotencyKeyProvider(IDomiumCacheKeyFactory keyFactory)
-    : IDomiumIdempotencyKeyProvider
+public sealed class DefaultDomiumIdempotencyKeyProvider : IDomiumIdempotencyKeyProvider
 {
-    private readonly IDomiumCacheKeyFactory _keyFactory =
-        keyFactory ?? throw new ArgumentNullException(nameof(keyFactory));
-
     public string GetKey<TCommand>(
         TCommand command,
         string keyPrefix)
@@ -31,12 +25,7 @@ public sealed class DefaultDomiumIdempotencyKeyProvider(IDomiumCacheKeyFactory k
                 $"Command {typeof(TCommand).FullName ?? typeof(TCommand).Name} requires a non-empty idempotency key.");
         }
 
-        return _keyFactory.CreateKey(
-            new DomiumCacheKeyDescriptor(
-                keyPrefix,
-                "idempotency",
-                typeof(TCommand).FullName ?? typeof(TCommand).Name,
-                "global",
-                idempotentCommand.IdempotencyKey.Trim()));
+        var commandName = typeof(TCommand).FullName ?? typeof(TCommand).Name;
+        return $"{keyPrefix}:idempotency:{commandName}:{idempotentCommand.IdempotencyKey.Trim()}";
     }
 }

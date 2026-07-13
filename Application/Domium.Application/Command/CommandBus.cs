@@ -1,26 +1,20 @@
-using System.Diagnostics;
 using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
-using Domium.Observability;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Application.Command;
 
+/// <summary>
+/// Resolves the handler and pipeline behaviors for a command and executes them.
+/// Cross-cutting concerns (observability, logging, validation, transactions, idempotency)
+/// are pipeline behaviors — the bus itself only builds and invokes the chain.
+/// </summary>
 public sealed class CommandBus(IServiceProvider serviceProvider) : ICommandBus
 {
-    public async Task ExecuteAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
         where TCommand : ICommand
     {
         if (command == null) throw new ArgumentNullException(nameof(command));
-
-        var commandName = typeof(TCommand).FullName ?? typeof(TCommand).Name;
-        var stopwatch = Stopwatch.StartNew();
-
-        using var activity = DomiumTelemetry.ActivitySource.StartActivity(
-            "domium.command.execute",
-            ActivityKind.Internal);
-
-        activity?.SetTag("domium.command.name", commandName);
 
         var handler = serviceProvider.GetRequiredService<ICommandHandler<TCommand>>();
         var behaviors = serviceProvider.GetServices<ICommandPipelineBehavior<TCommand>>().Reverse().ToArray();
@@ -33,27 +27,30 @@ public sealed class CommandBus(IServiceProvider serviceProvider) : ICommandBus
             pipeline = () => behavior.HandleAsync(command, cancellationToken, next);
         }
 
-        try
+        return pipeline();
+    }
+
+    public Task<TResult> ExecuteAsync<TCommand, TResult>(
+        TCommand command,
+        CancellationToken cancellationToken = default)
+        where TCommand : ICommand<TResult>
+    {
+        if (command == null) throw new ArgumentNullException(nameof(command));
+
+        var handler = serviceProvider.GetRequiredService<ICommandHandler<TCommand, TResult>>();
+        var behaviors = serviceProvider
+            .GetServices<ICommandPipelineBehavior<TCommand, TResult>>()
+            .Reverse()
+            .ToArray();
+
+        CommandHandlerDelegate<TResult> pipeline = () => handler.HandleAsync(command, cancellationToken);
+
+        foreach (var behavior in behaviors)
         {
-            await pipeline().ConfigureAwait(false);
-            DomiumTelemetry.CommandsExecuted.Add(
-                1,
-                new KeyValuePair<string, object?>("domium.command.name", commandName));
+            var next = pipeline;
+            pipeline = () => behavior.HandleAsync(command, cancellationToken, next);
         }
-        catch (Exception exception)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
-            activity?.SetTag("exception.type", exception.GetType().FullName);
-            activity?.SetTag("exception.message", exception.Message);
-            throw;
-        }
-        finally
-        {
-            stopwatch.Stop();
-            DomiumTelemetry.OperationDuration.Record(
-                stopwatch.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("domium.operation.type", "command"),
-                new KeyValuePair<string, object?>("domium.command.name", commandName));
-        }
+
+        return pipeline();
     }
 }

@@ -3,9 +3,23 @@ using Domium.Eventing.Abstractions;
 
 namespace Domium.Domain;
 
-public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
+/// <summary>
+/// Base type for aggregate roots. Domain events raised through <see cref="RaiseEvent"/> are
+/// dispatched in-process, in the same DI scope as the current unit of work, so event handlers
+/// share the caller's DbContext and their changes commit in the same transaction.
+///
+/// Two dispatch paths keep that guarantee:
+/// - Aggregates loaded from the database get an <see cref="IEventBus"/> injected by the EF
+///   materialization interceptor and publish immediately.
+/// - Freshly created aggregates (via <c>new</c>) have no bus yet; their events are buffered
+///   and published by <c>DomainEventDispatchInterceptor</c> right before SaveChanges — still
+///   inside the same scope and transaction.
+/// </summary>
+public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>, IDomiumEventSource
     where TId : IAggregateId
 {
+    private readonly List<IDomiumEvent> _pendingEvents = new();
+
     protected AggregateRoot()
     {
     }
@@ -19,17 +33,42 @@ public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
         EventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
     }
 
-    protected IEventBus EventBus { get; private set; } = default!;
+    /// <summary>
+    /// The event bus for immediate in-scope dispatch. Injected by the EF materialization
+    /// interceptor for loaded aggregates, or via the constructor.
+    /// </summary>
+    protected IEventBus? EventBus { get; private set; }
 
+    /// <inheritdoc />
+    public IReadOnlyCollection<IDomiumEvent> PendingDomainEvents => _pendingEvents;
+
+    /// <summary>
+    /// Publishes the event immediately when a bus is attached; otherwise buffers it for
+    /// dispatch just before SaveChanges (same scope, same transaction).
+    /// </summary>
     protected void RaiseEvent(IDomiumEvent @event)
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
-        if (EventBus == null)
+
+        if (EventBus is not null)
         {
-            throw new InvalidOperationException(
-                $"Event bus was not provided for aggregate '{GetType().Name}'.");
+            EventBus.PublishAsync(@event).GetAwaiter().GetResult();
+            return;
         }
 
-        EventBus.PublishAsync(@event).GetAwaiter().GetResult();
+        _pendingEvents.Add(@event);
+    }
+
+    /// <inheritdoc />
+    IReadOnlyList<IDomiumEvent> IDomiumEventSource.DequeuePendingDomainEvents()
+    {
+        if (_pendingEvents.Count == 0)
+        {
+            return Array.Empty<IDomiumEvent>();
+        }
+
+        var drained = _pendingEvents.ToArray();
+        _pendingEvents.Clear();
+        return drained;
     }
 }

@@ -34,3 +34,35 @@ public sealed class LoggingCommandBehavior<TCommand>(ILogger<LoggingCommandBehav
         }
     }
 }
+
+public sealed class LoggingCommandBehavior<TCommand, TResult>(ILogger<LoggingCommandBehavior<TCommand, TResult>> logger)
+    : ICommandPipelineBehavior<TCommand, TResult>
+    where TCommand : ICommand<TResult>
+{
+    private readonly ILogger<LoggingCommandBehavior<TCommand, TResult>> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+    public async Task<TResult> HandleAsync(
+        TCommand command,
+        CancellationToken cancellationToken,
+        CommandHandlerDelegate<TResult> next)
+    {
+        if (command == null) throw new ArgumentNullException(nameof(command));
+        if (next == null) throw new ArgumentNullException(nameof(next));
+
+        var commandName = typeof(TCommand).Name;
+
+        _logger.LogInformation("Executing command {CommandName}", commandName);
+
+        try
+        {
+            var result = await next().ConfigureAwait(false);
+            _logger.LogInformation("Executed command {CommandName}", commandName);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Command {CommandName} failed", commandName);
+            throw;
+        }
+    }
+}

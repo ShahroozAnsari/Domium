@@ -1,27 +1,27 @@
 using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
-using Domium.Caching.Abstractions.Models;
-using Domium.Caching.Abstractions.Stores;
+using Domium.Caching.Abstractions;
 using Domium.Idempotency.Abstractions.Models;
 using Domium.Idempotency.Abstractions.Providers;
 
 namespace Domium.Application.Command.Pipelines.Behaviors;
 
+/// <summary>
+/// Suppresses duplicate executions of <see cref="IIdempotentCommand"/>s. The reservation is
+/// an atomic try-set in <see cref="IDomiumCache"/>; a duplicate of a completed command is a
+/// silent no-op, while a duplicate of a still-running (or crashed mid-flight) command throws
+/// so the caller can retry once the outcome is known.
+/// </summary>
 public sealed class IdempotencyCommandBehavior<TCommand>(
-    IDomiumIdempotencyCacheStore cacheStore,
+    IDomiumCache cache,
     IDomiumIdempotencyKeyProvider keyProvider,
     DomiumIdempotencyBehaviorOptions options)
     : ICommandPipelineBehavior<TCommand>
     where TCommand : ICommand
 {
-    private readonly IDomiumIdempotencyCacheStore _cacheStore =
-        cacheStore ?? throw new ArgumentNullException(nameof(cacheStore));
-
-    private readonly IDomiumIdempotencyKeyProvider _keyProvider =
-        keyProvider ?? throw new ArgumentNullException(nameof(keyProvider));
-
-    private readonly DomiumIdempotencyBehaviorOptions _options =
-        options ?? throw new ArgumentNullException(nameof(options));
+    private readonly IDomiumCache _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    private readonly IDomiumIdempotencyKeyProvider _keyProvider = keyProvider ?? throw new ArgumentNullException(nameof(keyProvider));
+    private readonly DomiumIdempotencyBehaviorOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
     public async Task HandleAsync(
         TCommand command,
@@ -45,20 +45,25 @@ public sealed class IdempotencyCommandBehavior<TCommand>(
 
         var key = _keyProvider.GetKey(command, _options.KeyPrefix);
         var commandName = typeof(TCommand).FullName ?? typeof(TCommand).Name;
-        var cacheOptions = new DomiumCacheEntryOptions(_options.Expiration, null);
-        var metadata = new DomiumCacheInvalidationMetadata(null, null, "idempotency");
+        var entryOptions = new DomiumCacheEntryOptions(_options.Expiration);
         var entry = new DomiumIdempotencyEntry(
             key,
             commandName,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow.Add(_options.Expiration));
 
-        var reserved = await _cacheStore
-            .TrySetAsync(key, entry, cacheOptions, metadata, cancellationToken)
-            .ConfigureAwait(false);
+        var reserved = await _cache.TrySetAsync(key, entry, entryOptions, cancellationToken).ConfigureAwait(false);
 
         if (!reserved)
         {
+            var existing = await _cache.GetAsync<DomiumIdempotencyEntry>(key, cancellationToken).ConfigureAwait(false);
+
+            if (existing.Found && existing.Value?.CompletedAt is null)
+            {
+                throw new InvalidOperationException(
+                    $"Command {commandName} with idempotency key '{key}' is already in progress or its outcome is unknown.");
+            }
+
             return;
         }
 
@@ -68,7 +73,8 @@ public sealed class IdempotencyCommandBehavior<TCommand>(
         }
         catch
         {
-            await _cacheStore.RemoveAsync(key, cancellationToken).ConfigureAwait(false);
+            // Release the reservation even when the caller's token is already cancelled.
+            await _cache.RemoveAsync(key, CancellationToken.None).ConfigureAwait(false);
             throw;
         }
 
@@ -79,8 +85,6 @@ public sealed class IdempotencyCommandBehavior<TCommand>(
             entry.ExpiresAt,
             DateTimeOffset.UtcNow);
 
-        await _cacheStore
-            .SetAsync(key, completedEntry, cacheOptions, metadata, cancellationToken)
-            .ConfigureAwait(false);
+        await _cache.SetAsync(key, completedEntry, entryOptions, cancellationToken).ConfigureAwait(false);
     }
 }
