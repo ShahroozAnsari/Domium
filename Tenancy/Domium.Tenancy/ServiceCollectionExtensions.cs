@@ -10,7 +10,9 @@ namespace Domium.Tenancy;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the default ambient tenant context implementation.
+    /// Registers ambient tenant resolution and tenant database connection resolution.
+    /// Applications typically override <see cref="IDomiumTenantResolver"/> with a
+    /// request-specific implementation (e.g. reading a claim/header).
     /// </summary>
     public static IServiceCollection AddDomiumTenancy(this IServiceCollection services)
     {
@@ -23,8 +25,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IDomiumTenantAccessor>(
             provider => provider.GetRequiredService<IDomiumTenantContextAccessor>());
         services.TryAddSingleton<IDomiumTenantScopeFactory, DomiumTenantScopeFactory>();
-        services.TryAddScoped<IDomiumTenantNameResolver, AmbientDomiumTenantNameResolver>();
-        services.TryAddSingleton<IDomiumTenantConnectionStringResolver, DomiumTenantConnectionStringResolver>();
+        services.TryAddScoped<IDomiumTenantResolver, AmbientDomiumTenantResolver>();
+        services.TryAddScoped<IDomiumTenantConnectionResolver, DomiumTenantConnectionResolver>();
 
         return services;
     }

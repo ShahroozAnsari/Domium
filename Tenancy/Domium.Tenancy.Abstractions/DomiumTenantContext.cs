@@ -1,37 +1,31 @@
-﻿namespace Domium.Tenancy.Abstractions;
+using System;
+
+namespace Domium.Tenancy.Abstractions;
 
 /// <summary>
-/// Represents the current tenant context.
+/// The tenant currently in scope. Identified by <see cref="TenantId"/> — a stable key
+/// (e.g. "acme") that drives the tenant database naming convention.
 /// </summary>
 public sealed class DomiumTenantContext
 {
-    /// <summary>
-    /// Gets a tenant context that represents the absence of tenant information.
-    /// </summary>
-    public static DomiumTenantContext Unavailable { get; } = new DomiumTenantContext(null, false);
+    /// <summary>A context representing the absence of a tenant.</summary>
+    public static DomiumTenantContext Unavailable { get; } = new(null, false);
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DomiumTenantContext"/> class.
-    /// </summary>
-    /// <param name="tenantId">
-    /// The tenant identifier.
-    /// </param>
-    /// <param name="isAvailable">
-    /// Indicates whether a tenant context is available.
-    /// </param>
-    public DomiumTenantContext(string? tenantId, bool isAvailable)
+    private DomiumTenantContext(string? tenantId, bool isAvailable)
     {
         TenantId = tenantId;
         IsAvailable = isAvailable;
     }
 
-    /// <summary>
-    /// Gets the tenant identifier.
-    /// </summary>
+    /// <summary>Creates an available tenant context for the given tenant id.</summary>
+    public static DomiumTenantContext For(string tenantId) =>
+        string.IsNullOrWhiteSpace(tenantId)
+            ? throw new ArgumentException("Tenant id is required.", nameof(tenantId))
+            : new DomiumTenantContext(tenantId.Trim(), true);
+
+    /// <summary>The current tenant id, or <c>null</c> when unavailable.</summary>
     public string? TenantId { get; }
 
-    /// <summary>
-    /// Gets a value indicating whether a tenant context is available.
-    /// </summary>
+    /// <summary>Whether a tenant is in scope.</summary>
     public bool IsAvailable { get; }
 }

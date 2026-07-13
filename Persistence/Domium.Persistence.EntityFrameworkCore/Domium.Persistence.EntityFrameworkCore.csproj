@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain\Domium.Domain.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Tenancy\Domium.Tenancy.Abstractions\Domium.Tenancy.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

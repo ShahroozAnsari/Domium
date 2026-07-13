@@ -3,12 +3,14 @@ using Domium.Tenancy.Abstractions;
 namespace Domium.Tenancy;
 
 /// <summary>
-/// Creates scopes that temporarily set the ambient tenant context.
+/// Creates scopes that temporarily set the ambient tenant context — used by non-request
+/// entry points (e.g. background device ingestion) to run work as a specific tenant.
 /// </summary>
 public sealed class DomiumTenantScopeFactory(IDomiumTenantContextAccessor tenantContextAccessor)
     : IDomiumTenantScopeFactory
 {
-    private readonly IDomiumTenantContextAccessor _tenantContextAccessor = tenantContextAccessor ?? throw new ArgumentNullException(nameof(tenantContextAccessor));
+    private readonly IDomiumTenantContextAccessor _tenantContextAccessor =
+        tenantContextAccessor ?? throw new ArgumentNullException(nameof(tenantContextAccessor));
 
     public IDisposable BeginScope(string tenantId)
     {
@@ -18,7 +20,7 @@ public sealed class DomiumTenantScopeFactory(IDomiumTenantContextAccessor tenant
         }
 
         var previous = _tenantContextAccessor.GetCurrent();
-        _tenantContextAccessor.SetCurrent(new DomiumTenantContext(tenantId.Trim(), true));
+        _tenantContextAccessor.SetCurrent(DomiumTenantContext.For(tenantId));
 
         return new TenantScope(_tenantContextAccessor, previous);
     }
