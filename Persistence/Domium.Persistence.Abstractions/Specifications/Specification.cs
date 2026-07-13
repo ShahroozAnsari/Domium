@@ -8,6 +8,15 @@ public abstract class Specification<T> : ISpecification<T>
 {
     private readonly List<Expression<Func<T, object>>> _includes = new();
 
+    protected Specification()
+    {
+    }
+
+    protected Specification(Expression<Func<T, bool>> criteria)
+    {
+        Criteria = criteria ?? throw new ArgumentNullException(nameof(criteria));
+    }
+
     public Expression<Func<T, bool>>? Criteria { get; protected set; }
 
     public Expression<Func<T, object>>? OrderBy { get; protected set; }

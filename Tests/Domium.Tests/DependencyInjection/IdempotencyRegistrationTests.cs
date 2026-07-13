@@ -1,7 +1,8 @@
 using Domium.Application.Abstractions.Command;
-using Domium.Caching.Abstractions.Stores;
+using Domium.Caching.Abstractions;
 using Domium.Configuration;
 using Domium.Extensions.DependencyInjection;
+using Domium.Idempotency.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domium.Tests.DependencyInjection;
@@ -65,10 +66,10 @@ public sealed class IdempotencyRegistrationTests
     public async Task UseIdempotency_does_not_remove_reservation_when_completion_mark_fails()
     {
         CountingIdempotentCommandHandler.Reset();
-        var cacheStore = new CompletionFailingIdempotencyCacheStore();
+        var cache = new CompletionFailingCache();
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumIdempotencyCacheStore>(cacheStore);
+        services.AddSingleton<IDomiumCache>(cache);
         services.AddDomium(options => options.UseIdempotency());
 
         await using var provider = services.BuildServiceProvider();
@@ -79,16 +80,16 @@ public sealed class IdempotencyRegistrationTests
         await commandBus.ExecuteAsync(command);
 
         Assert.Equal(1, CountingIdempotentCommandHandler.ExecutionCount);
-        Assert.Equal(0, cacheStore.RemoveCount);
+        Assert.Equal(0, cache.RemoveCount);
     }
 
     [Fact]
-    public async Task UseIdempotency_skips_handler_when_key_is_already_reserved()
+    public async Task UseIdempotency_skips_handler_when_duplicate_outcome_is_unknown()
     {
         CountingIdempotentCommandHandler.Reset();
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumIdempotencyCacheStore>(new AlreadyReservedIdempotencyCacheStore());
+        services.AddSingleton<IDomiumCache>(new AlreadyReservedCache(existingEntry: null));
         services.AddDomium(options => options.UseIdempotency());
 
         await using var provider = services.BuildServiceProvider();
@@ -96,6 +97,30 @@ public sealed class IdempotencyRegistrationTests
 
         await commandBus.ExecuteAsync(new CountingIdempotentCommand("reserved"));
 
+        Assert.Equal(0, CountingIdempotentCommandHandler.ExecutionCount);
+    }
+
+    [Fact]
+    public async Task UseIdempotency_throws_when_duplicate_is_still_in_progress()
+    {
+        CountingIdempotentCommandHandler.Reset();
+        var inProgress = new DomiumIdempotencyEntry(
+            "key",
+            "command",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.AddHours(1));
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IDomiumCache>(new AlreadyReservedCache(inProgress));
+        services.AddDomium(options => options.UseIdempotency());
+
+        await using var provider = services.BuildServiceProvider();
+        var commandBus = provider.GetRequiredService<ICommandBus>();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => commandBus.ExecuteAsync(new CountingIdempotentCommand("reserved")));
+
+        Assert.Contains("in progress", exception.Message);
         Assert.Equal(0, CountingIdempotentCommandHandler.ExecutionCount);
     }
 
@@ -179,21 +204,20 @@ public sealed class IdempotencyRegistrationTests
     }
 
     [Fact]
-    public void Redis_idempotency_uses_own_cache_store_configuration()
+    public void Redis_idempotency_registers_cache_store_from_options()
     {
         var services = new ServiceCollection();
 
         var exception = Record.Exception(() =>
             services.AddDomium(options =>
-                options
-                    .UseIdempotency(idempotency =>
-                    {
-                        idempotency.Store.Provider = DomiumCacheProvider.Redis;
-                        idempotency.Store.RedisConnectionString = "localhost";
-                    })));
+                options.UseIdempotency(idempotency =>
+                {
+                    idempotency.Store.Provider = DomiumCacheProvider.Redis;
+                    idempotency.Store.RedisConnectionString = "localhost";
+                })));
 
         Assert.Null(exception);
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumIdempotencyCacheStore));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCache));
     }
 
     [Fact]
@@ -203,12 +227,11 @@ public sealed class IdempotencyRegistrationTests
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             services.AddDomium(options =>
-                options
-                    .UseIdempotency(idempotency =>
-                    {
-                        idempotency.Store.Provider = DomiumCacheProvider.Redis;
-                        idempotency.Store.RedisConnectionString = string.Empty;
-                    })));
+                options.UseIdempotency(idempotency =>
+                {
+                    idempotency.Store.Provider = DomiumCacheProvider.Redis;
+                    idempotency.Store.RedisConnectionString = string.Empty;
+                })));
 
         Assert.Contains("Idempotency Redis store requires a non-empty Redis connection string", exception.Message);
     }
@@ -225,11 +248,11 @@ public sealed class IdempotencyRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         Assert.Throws<TestConnectionFactoryException>(
-            () => provider.GetRequiredService<IDomiumIdempotencyCacheStore>());
+            () => provider.GetRequiredService<IDomiumCache>());
     }
 
     [Fact]
-    public void Query_caching_and_idempotency_resolve_separate_feature_cache_stores()
+    public void Query_caching_and_idempotency_share_one_cache_store()
     {
         var services = new ServiceCollection();
 
@@ -240,10 +263,9 @@ public sealed class IdempotencyRegistrationTests
         });
 
         using var provider = services.BuildServiceProvider();
-        var queryStore = provider.GetRequiredService<IDomiumQueryCacheStore>();
-        var idempotencyStore = provider.GetRequiredService<IDomiumIdempotencyCacheStore>();
 
-        Assert.NotSame(queryStore, idempotencyStore);
+        Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IDomiumCache));
+        Assert.NotNull(provider.GetRequiredService<IDomiumCache>());
     }
 
     public sealed class CountingIdempotentCommand(string idempotencyKey) : IIdempotentCommand
@@ -351,109 +373,53 @@ public sealed class IdempotencyRegistrationTests
     {
     }
 
-    private sealed class AlreadyReservedIdempotencyCacheStore : IDomiumIdempotencyCacheStore
+    /// <summary>TrySet always fails; Get returns the given entry (or a miss when null).</summary>
+    private sealed class AlreadyReservedCache(DomiumIdempotencyEntry? existingEntry) : IDomiumCache
     {
-        public Task<Domium.Caching.Abstractions.Results.DomiumCacheResult<T>> TryGetAsync<T>(
-            string key,
-            CancellationToken cancellationToken)
+        public Task<DomiumCacheResult<T>> GetAsync<T>(string key, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(Domium.Caching.Abstractions.Results.DomiumCacheResult<T>.Miss());
+            if (existingEntry is T typed)
+            {
+                return Task.FromResult(DomiumCacheResult<T>.Hit(typed));
+            }
+
+            return Task.FromResult(DomiumCacheResult<T>.Miss());
         }
 
-        public Task SetAsync<T>(
-            string key,
-            T value,
-            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
-            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task SetAsync<T>(string key, T value, DomiumCacheEntryOptions options, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
 
-        public Task<bool> TrySetAsync<T>(
-            string key,
-            T value,
-            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
-            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(false);
-        }
+        public Task<bool> TrySetAsync<T>(string key, T value, DomiumCacheEntryOptions options, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
 
-        public Task RemoveAsync(string key, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task RemoveByTagAsync(string tag, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveByEntityKeyAsync(string entityKey, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveByGroupAsync(string group, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task RemoveByTagAsync(string tag, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class CompletionFailingIdempotencyCacheStore : IDomiumIdempotencyCacheStore
+    /// <summary>Reservations succeed; marking completion (SetAsync) always fails.</summary>
+    private sealed class CompletionFailingCache : IDomiumCache
     {
         private readonly HashSet<string> _reservedKeys = new(StringComparer.Ordinal);
 
         public int RemoveCount { get; private set; }
 
-        public Task<Domium.Caching.Abstractions.Results.DomiumCacheResult<T>> TryGetAsync<T>(
-            string key,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(Domium.Caching.Abstractions.Results.DomiumCacheResult<T>.Miss());
-        }
+        public Task<DomiumCacheResult<T>> GetAsync<T>(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(DomiumCacheResult<T>.Miss());
 
-        public Task SetAsync<T>(
-            string key,
-            T value,
-            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
-            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
-        {
+        public Task SetAsync<T>(string key, T value, DomiumCacheEntryOptions options, CancellationToken cancellationToken = default) =>
             throw new TestCompletionException();
-        }
 
-        public Task<bool> TrySetAsync<T>(
-            string key,
-            T value,
-            Domium.Caching.Abstractions.Models.DomiumCacheEntryOptions options,
-            Domium.Caching.Abstractions.Models.DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_reservedKeys.Add(key));
-        }
+        public Task<bool> TrySetAsync<T>(string key, T value, DomiumCacheEntryOptions options, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_reservedKeys.Add(key));
 
-        public Task RemoveAsync(string key, CancellationToken cancellationToken)
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
         {
             RemoveCount++;
             _reservedKeys.Remove(key);
             return Task.CompletedTask;
         }
 
-        public Task RemoveByTagAsync(string tag, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveByEntityKeyAsync(string entityKey, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveByGroupAsync(string group, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task RemoveByTagAsync(string tag, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

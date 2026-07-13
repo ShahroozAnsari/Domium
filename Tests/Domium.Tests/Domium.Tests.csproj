@@ -31,7 +31,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Configuration\Domium.Configuration\Domium.Configuration.csproj" />
-    <ProjectReference Include="..\..\Caching\Domium.Caching\Domium.Caching.csproj" />
     <ProjectReference Include="..\..\Extensions\Domium.Extensions.DependencyInjection\Domium.Extensions.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />

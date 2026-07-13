@@ -1,10 +1,5 @@
 using Domium.Application.Abstractions.Query;
-using Domium.Caching.Abstractions.Models;
-using Domium.Caching.Abstractions.Providers;
-using Domium.Caching.Abstractions.Results;
-using Domium.Caching.Abstractions.Stores;
-using Domium.Caching.Exceptions;
-using Domium.Caching.Providers;
+using Domium.Caching.Abstractions;
 using Domium.Configuration;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,7 +9,7 @@ namespace Domium.Tests.DependencyInjection;
 public sealed class CachingRegistrationTests
 {
     [Fact]
-    public async Task UseCaching_resolves_query_pipeline_and_reuses_cached_global_result()
+    public async Task UseCaching_serves_cacheable_query_from_cache_on_second_execution()
     {
         CountingQueryHandler.Reset();
         var services = new ServiceCollection();
@@ -22,76 +17,87 @@ public sealed class CachingRegistrationTests
         services.AddDomium(options => options.UseCaching());
 
         await using var provider = services.BuildServiceProvider();
-        RegisterPolicy(provider, DomiumQueryCacheScopeMode.Global);
-
         var queryBus = provider.GetRequiredService<IQueryBus>();
 
-        var first = await queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery());
-        var second = await queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery());
+        var first = await queryBus.ExecuteAsync<CountingCacheableQuery, CountingResult>(new CountingCacheableQuery());
+        var second = await queryBus.ExecuteAsync<CountingCacheableQuery, CountingResult>(new CountingCacheableQuery());
 
         Assert.Same(first, second);
         Assert.Equal(1, CountingQueryHandler.ExecutionCount);
     }
 
     [Fact]
-    public async Task UseCaching_preserves_policy_entry_options_when_storing_result()
+    public async Task UseCaching_ignores_queries_that_do_not_opt_in()
     {
-        var cacheStore = new CapturingCacheStore();
+        PlainQueryHandler.Reset();
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumQueryCacheStore>(cacheStore);
         services.AddDomium(options => options.UseCaching());
 
         await using var provider = services.BuildServiceProvider();
-        RegisterPolicy(
-            provider,
-            DomiumQueryCacheScopeMode.Global,
-            absoluteExpirationRelativeToNow: TimeSpan.FromMinutes(2),
-            slidingExpiration: TimeSpan.FromSeconds(30));
-
         var queryBus = provider.GetRequiredService<IQueryBus>();
 
-        await queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery());
+        await queryBus.ExecuteAsync<PlainQuery, CountingResult>(new PlainQuery());
+        await queryBus.ExecuteAsync<PlainQuery, CountingResult>(new PlainQuery());
 
-        Assert.Equal(TimeSpan.FromMinutes(2), cacheStore.EntryOptions?.AbsoluteExpirationRelativeToNow);
-        Assert.Equal(TimeSpan.FromSeconds(30), cacheStore.EntryOptions?.SlidingExpiration);
+        Assert.Equal(2, PlainQueryHandler.ExecutionCount);
     }
 
     [Fact]
-    public async Task UseCaching_applies_default_expiration_when_policy_has_no_expiration()
+    public async Task RemoveByTagAsync_invalidates_cached_query_results()
     {
-        var cacheStore = new CapturingCacheStore();
+        CountingQueryHandler.Reset();
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDomiumQueryCacheStore>(cacheStore);
+        services.AddDomium(options => options.UseCaching());
+
+        await using var provider = services.BuildServiceProvider();
+        var queryBus = provider.GetRequiredService<IQueryBus>();
+        var cache = provider.GetRequiredService<IDomiumCache>();
+
+        await queryBus.ExecuteAsync<CountingCacheableQuery, CountingResult>(new CountingCacheableQuery());
+        await cache.RemoveByTagAsync("counting");
+        await queryBus.ExecuteAsync<CountingCacheableQuery, CountingResult>(new CountingCacheableQuery());
+
+        Assert.Equal(2, CountingQueryHandler.ExecutionCount);
+    }
+
+    [Fact]
+    public async Task UseCaching_uses_query_duration_when_provided()
+    {
+        CountingQueryHandler.Reset();
+        var cache = new CapturingCache();
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IDomiumCache>(cache);
+        services.AddDomium(options => options.UseCaching());
+
+        await using var provider = services.BuildServiceProvider();
+        var queryBus = provider.GetRequiredService<IQueryBus>();
+
+        await queryBus.ExecuteAsync<CountingCacheableQuery, CountingResult>(new CountingCacheableQuery());
+
+        Assert.Equal(TimeSpan.FromMinutes(2), cache.LastOptions?.Duration);
+        Assert.Contains("counting", cache.LastOptions?.Tags ?? Array.Empty<string>());
+    }
+
+    [Fact]
+    public async Task UseCaching_applies_default_expiration_when_query_has_no_duration()
+    {
+        DefaultDurationQueryHandler.Reset();
+        var cache = new CapturingCache();
+        var services = new ServiceCollection();
+
+        services.AddSingleton<IDomiumCache>(cache);
         services.AddDomium(options =>
-            options.UseCaching(cacheOptions =>
-                cacheOptions.DefaultExpiration = TimeSpan.FromMinutes(7)));
+            options.UseCaching(cacheOptions => cacheOptions.DefaultExpiration = TimeSpan.FromMinutes(7)));
 
         await using var provider = services.BuildServiceProvider();
-        RegisterPolicy(provider, DomiumQueryCacheScopeMode.Global);
-
         var queryBus = provider.GetRequiredService<IQueryBus>();
 
-        await queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery());
+        await queryBus.ExecuteAsync<DefaultDurationQuery, CountingResult>(new DefaultDurationQuery());
 
-        Assert.Equal(TimeSpan.FromMinutes(7), cacheStore.EntryOptions?.AbsoluteExpirationRelativeToNow);
-    }
-
-    [Fact]
-    public async Task Tenant_scoped_cache_policy_fails_clearly_without_tenant_context()
-    {
-        var services = new ServiceCollection();
-
-        services.AddDomium(options => options.UseCaching());
-
-        await using var provider = services.BuildServiceProvider();
-        RegisterPolicy(provider, DomiumQueryCacheScopeMode.Tenant);
-
-        var queryBus = provider.GetRequiredService<IQueryBus>();
-
-        await Assert.ThrowsAsync<DomiumCacheScopeResolutionException>(
-            () => queryBus.ExecuteAsync<CountingQuery, CountingResult>(new CountingQuery()));
+        Assert.Equal(TimeSpan.FromMinutes(7), cache.LastOptions?.Duration);
     }
 
     [Fact]
@@ -108,7 +114,7 @@ public sealed class CachingRegistrationTests
                 })));
 
         Assert.Null(exception);
-        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumQueryCacheStore));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCache));
     }
 
     [Fact]
@@ -127,36 +133,23 @@ public sealed class CachingRegistrationTests
         Assert.Contains("Query caching Redis store requires a non-empty Redis connection string", exception.Message);
     }
 
-    private static void RegisterPolicy(
-        IServiceProvider provider,
-        DomiumQueryCacheScopeMode scopeMode,
-        TimeSpan? absoluteExpirationRelativeToNow = null,
-        TimeSpan? slidingExpiration = null)
+    public sealed record CountingCacheableQuery : IQuery<CountingResult>, ICacheableQuery
     {
-        var policyProvider = provider.GetRequiredService<IDomiumQueryCachePolicyRegistry>();
+        public TimeSpan? Duration => TimeSpan.FromMinutes(2);
 
-        policyProvider.Register(
-            new DomiumQueryCachePolicy(
-                typeof(CountingQuery),
-                enabled: true,
-                scopeMode,
-                absoluteExpirationRelativeToNow,
-                slidingExpiration,
-                keyPrefix: null,
-                cacheNullValues: false,
-                invalidationMetadata: null));
+        public IReadOnlyCollection<string> Tags => new[] { "counting" };
     }
 
-    public sealed class CountingQuery : IQuery<CountingResult>
-    {
-    }
+    public sealed record DefaultDurationQuery : IQuery<CountingResult>, ICacheableQuery;
+
+    public sealed record PlainQuery : IQuery<CountingResult>;
 
     public sealed class CountingResult(int value)
     {
         public int Value { get; } = value;
     }
 
-    public sealed class CountingQueryHandler : IQueryHandler<CountingQuery, CountingResult>
+    public sealed class CountingQueryHandler : IQueryHandler<CountingCacheableQuery, CountingResult>
     {
         public static int ExecutionCount { get; private set; }
 
@@ -166,7 +159,7 @@ public sealed class CachingRegistrationTests
         }
 
         public Task<CountingResult> HandleAsync(
-            CountingQuery query,
+            CountingCacheableQuery query,
             CancellationToken cancellationToken = default)
         {
             ExecutionCount++;
@@ -174,57 +167,63 @@ public sealed class CachingRegistrationTests
         }
     }
 
-    private sealed class CapturingCacheStore : IDomiumQueryCacheStore
+    public sealed class DefaultDurationQueryHandler : IQueryHandler<DefaultDurationQuery, CountingResult>
     {
-        public DomiumCacheEntryOptions? EntryOptions { get; private set; }
+        public static int ExecutionCount { get; private set; }
 
-        public Task<DomiumCacheResult<T>> TryGetAsync<T>(
-            string key,
-            CancellationToken cancellationToken)
+        public static void Reset()
         {
-            return Task.FromResult(DomiumCacheResult<T>.Miss());
+            ExecutionCount = 0;
         }
 
-        public Task SetAsync<T>(
-            string key,
-            T value,
-            DomiumCacheEntryOptions options,
-            DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
+        public Task<CountingResult> HandleAsync(
+            DefaultDurationQuery query,
+            CancellationToken cancellationToken = default)
         {
-            EntryOptions = options;
+            ExecutionCount++;
+            return Task.FromResult(new CountingResult(ExecutionCount));
+        }
+    }
+
+    public sealed class PlainQueryHandler : IQueryHandler<PlainQuery, CountingResult>
+    {
+        public static int ExecutionCount { get; private set; }
+
+        public static void Reset()
+        {
+            ExecutionCount = 0;
+        }
+
+        public Task<CountingResult> HandleAsync(
+            PlainQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            ExecutionCount++;
+            return Task.FromResult(new CountingResult(ExecutionCount));
+        }
+    }
+
+    private sealed class CapturingCache : IDomiumCache
+    {
+        public DomiumCacheEntryOptions? LastOptions { get; private set; }
+
+        public Task<DomiumCacheResult<T>> GetAsync<T>(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(DomiumCacheResult<T>.Miss());
+
+        public Task SetAsync<T>(string key, T value, DomiumCacheEntryOptions options, CancellationToken cancellationToken = default)
+        {
+            LastOptions = options;
             return Task.CompletedTask;
         }
 
-        public Task<bool> TrySetAsync<T>(
-            string key,
-            T value,
-            DomiumCacheEntryOptions options,
-            DomiumCacheInvalidationMetadata invalidationMetadata,
-            CancellationToken cancellationToken)
+        public Task<bool> TrySetAsync<T>(string key, T value, DomiumCacheEntryOptions options, CancellationToken cancellationToken = default)
         {
-            EntryOptions = options;
+            LastOptions = options;
             return Task.FromResult(true);
         }
 
-        public Task RemoveAsync(string key, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task RemoveByTagAsync(string tag, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveByEntityKeyAsync(string entityKey, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task RemoveByGroupAsync(string group, CancellationToken cancellationToken)
-        {
-            return Task.CompletedTask;
-        }
+        public Task RemoveByTagAsync(string tag, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

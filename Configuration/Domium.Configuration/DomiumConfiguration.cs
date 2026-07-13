@@ -227,7 +227,38 @@ public static class DomiumConfiguration
                !name.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) &&
                !name.StartsWith("mscorlib", StringComparison.Ordinal) &&
                !name.StartsWith("netstandard", StringComparison.Ordinal) &&
-               !name.StartsWith("Domium", StringComparison.Ordinal);
+               !IsDomiumFrameworkAssembly(name);
+    }
+
+    private static bool IsDomiumFrameworkAssembly(string name)
+    {
+        return name is "Domium"
+            or "Domium.Configuration"
+            or "Domium.Domain"
+            or "Domium.Domain.Abstractions"
+            or "Domium.Application"
+            or "Domium.Application.Abstractions"
+            or "Domium.Persistence.Abstractions"
+            or "Domium.Persistence.EntityFrameworkCore"
+            or "Domium.Persistence.Dapper"
+            or "Domium.Caching.Abstractions"
+            or "Domium.Caching.Memory"
+            or "Domium.Caching.Redis"
+            or "Domium.Eventing"
+            or "Domium.Eventing.Abstractions"
+            or "Domium.Eventing.MassTransit"
+            or "Domium.Facade"
+            or "Domium.Facade.Abstractions"
+            or "Domium.Idempotency"
+            or "Domium.Idempotency.Abstractions"
+            or "Domium.Observability"
+            or "Domium.Observability.OpenTelemetry"
+            or "Domium.Querying"
+            or "Domium.Querying.Abstractions"
+            or "Domium.Querying.EntityFrameworkCore"
+            or "Domium.Tenancy"
+            or "Domium.Tenancy.Abstractions"
+            or "Domium.Extensions.DependencyInjection";
     }
 
     private static IEnumerable<Type> GetApplicationServiceInterfaces(Type type, HashSet<Assembly> assemblySet)
@@ -277,6 +308,7 @@ public static class DomiumConfiguration
 
         if (options.IdempotencyEnabled)
         {
+            ValidateIdempotencyOptions(options.IdempotencyOptions);
             EnsureDomiumCache(services, options.IdempotencyOptions.Store);
             RegisterIdempotency(services, options.IdempotencyOptions);
         }

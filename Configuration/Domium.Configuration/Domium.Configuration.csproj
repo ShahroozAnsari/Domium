@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
@@ -21,7 +21,6 @@
     <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
-    <ProjectReference Include="..\..\Caching\Domium.Caching\Domium.Caching.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing\Domium.Eventing.csproj" />

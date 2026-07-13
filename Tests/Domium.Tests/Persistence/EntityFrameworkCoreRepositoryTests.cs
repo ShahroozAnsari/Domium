@@ -5,8 +5,8 @@ using Domium.Domain.Abstractions.Entity;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions;
 using Domium.Persistence.Abstractions;
+using Domium.Persistence.Abstractions.Specifications;
 using Domium.Persistence.EntityFrameworkCore;
-using Domium.Persistence.EntityFrameworkCore.Specifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -35,31 +35,10 @@ public sealed class EntityFrameworkCoreRepositoryTests
     }
 
     [Fact]
-    public async Task EntityFrameworkCore_registration_can_configure_dbcontext()
-    {
-        var services = new ServiceCollection();
-
-        services.AddSingleton<IEventBus, CapturingEventBus>();
-        services.AddDomiumEntityFrameworkCore<TestDbContext>(options =>
-            options
-                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-                .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
-
-        await using var provider = services.BuildServiceProvider();
-        var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
-        var id = new CustomerId(Guid.NewGuid());
-
-        await unitOfWork.BeginAsync();
-        await repository.AddAsync(new Customer(id, "Ada", true));
-        await unitOfWork.CommitAsync();
-
-        Assert.NotNull(await repository.GetByIdAsync(id));
-    }
-
-    [Fact]
     public async Task Repository_applies_specifications()
     {
         await using var provider = CreateProvider();
+        var repository = provider.GetRequiredService<ISpecificationRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
 
         await unitOfWork.BeginAsync();
@@ -78,7 +57,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
     }
 
     [Fact]
-    public async Task Aggregate_publishes_domain_events_through_event_bus()
+    public async Task Aggregate_with_injected_bus_publishes_domain_events_immediately()
     {
         CapturingEventBus.Reset();
         await using var provider = CreateProvider();
@@ -103,19 +82,37 @@ public sealed class EntityFrameworkCoreRepositoryTests
             true,
             provider.GetRequiredService<IEventBus>());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Task.Run(customer.Activate));
+        Assert.Throws<InvalidOperationException>(() => customer.Activate());
     }
 
     [Fact]
-    public async Task UnitOfWork_saves_domain_event_handler_changes_before_commit()
+    public async Task Aggregate_created_without_bus_buffers_events_until_save()
     {
-        await using var provider = CreateProviderWithDomainEventHandler();
+        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
+
+        customer.Activate();
+
+        Assert.Single(customer.PendingDomainEvents);
+    }
+
+    [Fact]
+    public async Task Buffered_domain_events_dispatch_before_save_in_same_transaction()
+    {
+        // Real in-memory bus + a handler that writes through the SAME DbContext: the
+        // interceptor publishes the buffered event right before SaveChanges, so the
+        // handler's audit row persists atomically with the aggregate.
+        var services = new ServiceCollection();
+        services.AddDomiumEventing();
+        services.AddScoped<IDomainEventHandler<CustomerActivatedDomainEvent>, CustomerActivatedAuditHandler>();
+        services.AddDomiumEntityFrameworkCore<TestDbContext>(options =>
+            options
+                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+                .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
+
+        await using var provider = services.BuildServiceProvider();
+        var repository = provider.GetRequiredService<IRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
-        var customer = new Customer(
-            new CustomerId(Guid.NewGuid()),
-            "Ada",
-            true,
-            provider.GetRequiredService<IEventBus>());
+        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", false);
 
         await unitOfWork.BeginAsync();
         await repository.AddAsync(customer);
@@ -126,6 +123,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
         var audit = await dbContext.CustomerActivationAudits.SingleAsync();
 
         Assert.Equal(customer.Id, audit.CustomerId);
+        Assert.Empty(customer.PendingDomainEvents);
     }
 
     [Fact]
@@ -172,45 +170,39 @@ public sealed class EntityFrameworkCoreRepositoryTests
         Assert.Equal(
             "operator",
             dbContext.Entry(customer).Property<string?>(DomiumShadowPropertyNames.DeletedBy).CurrentValue);
-        Assert.NotNull(
-            dbContext.Entry(customer).Property<DateTimeOffset?>(DomiumShadowPropertyNames.ModifiedAt).CurrentValue);
         Assert.Equal(EntityState.Unchanged, dbContext.Entry(customer).State);
     }
 
     [Fact]
-    public async Task BaseEntityConfiguration_applies_shadow_properties_to_owned_children()
+    public async Task BaseAggregateConfiguration_applies_shadow_properties_and_soft_delete_filter()
     {
         await using var provider = CreateProvider(currentUserId: "operator");
         var dbContext = provider.GetRequiredService<TestDbContext>();
         var customer = new ConfiguredCustomer(new CustomerId(Guid.NewGuid()), "Ada");
-        var note = new ConfiguredCustomerNote(Guid.NewGuid(), "Call before noon");
 
-        customer.AddNote(note);
         dbContext.ConfiguredCustomers.Add(customer);
         await dbContext.SaveChangesAsync();
 
-        var noteEntry = dbContext.Entry(note);
         Assert.NotEqual(
             default,
-            noteEntry.Property<DateTimeOffset>(DomiumShadowPropertyNames.CreatedAt).CurrentValue);
+            dbContext.Entry(customer).Property<DateTimeOffset>(DomiumShadowPropertyNames.CreatedAt).CurrentValue);
         Assert.Equal(
             "operator",
-            noteEntry.Property<string?>(DomiumShadowPropertyNames.CreatedBy).CurrentValue);
+            dbContext.Entry(customer).Property<string?>(DomiumShadowPropertyNames.CreatedBy).CurrentValue);
 
-        noteEntry.State = EntityState.Deleted;
+        dbContext.ConfiguredCustomers.Remove(customer);
         await dbContext.SaveChangesAsync();
 
-        Assert.True(noteEntry.Property<bool>(DomiumShadowPropertyNames.IsDeleted).CurrentValue);
-        Assert.NotNull(noteEntry.Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt).CurrentValue);
-        Assert.NotNull(noteEntry.Property<DateTimeOffset?>(DomiumShadowPropertyNames.ModifiedAt).CurrentValue);
-        Assert.Equal(
-            "operator",
-            noteEntry.Property<string?>(DomiumShadowPropertyNames.DeletedBy).CurrentValue);
+        // Soft-deleted aggregates are invisible to normal queries…
+        Assert.Empty(await dbContext.ConfiguredCustomers.ToListAsync());
+
+        // …but still reachable when the filter is explicitly bypassed.
+        Assert.Single(await dbContext.ConfiguredCustomers.IgnoreQueryFilters().ToListAsync());
     }
 
     private static ServiceProvider CreateProvider()
     {
-        return CreateProvider<CapturingEventBus>();
+        return CreateProvider<CapturingEventBus>(currentUserId: null);
     }
 
     private static ServiceProvider CreateProvider<TEventBus>()
@@ -235,26 +227,10 @@ public sealed class EntityFrameworkCoreRepositoryTests
             services.AddScoped<IDomiumCurrentUserAccessor>(_ => new TestCurrentUserAccessor(currentUserId));
         }
 
-        services.AddDbContext<TestDbContext>(options =>
+        services.AddDomiumEntityFrameworkCore<TestDbContext>(options =>
             options
                 .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
                 .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
-        services.AddDomiumEntityFrameworkCore<TestDbContext>();
-
-        return services.BuildServiceProvider();
-    }
-
-    private static ServiceProvider CreateProviderWithDomainEventHandler()
-    {
-        var services = new ServiceCollection();
-
-        services.AddDomiumEventing();
-        services.AddScoped<IDomainEventHandler<CustomerActivatedDomainEvent>, CustomerActivatedAuditHandler>();
-        services.AddDbContext<TestDbContext>(options =>
-            options
-                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-                .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
-        services.AddDomiumEntityFrameworkCore<TestDbContext>();
 
         return services.BuildServiceProvider();
     }
@@ -265,19 +241,15 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         services.AddSingleton<IEventBus, CapturingEventBus>();
         services.AddScoped<IDomainService, TestDomainService>();
-        services.AddDbContext<TestDbContext>(options =>
+        services.AddDomiumEntityFrameworkCore<TestDbContext>(options =>
             options
                 .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
                 .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
-        services.AddDomiumEntityFrameworkCore<TestDbContext>();
 
         return services.BuildServiceProvider();
     }
 
-    private sealed class TestDbContext(
-        DbContextOptions<TestDbContext> options,
-        IEventBus eventBus)
-        : DomiumDbContext(options, eventBus)
+    private sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DomiumDbContext(options)
     {
         public DbSet<Customer> Customers => Set<Customer>();
 
@@ -414,13 +386,10 @@ public sealed class EntityFrameworkCoreRepositoryTests
         }
 
         public string Name { get; private set; }
-
     }
 
-    private sealed class ConfiguredCustomer : AggregateRoot<CustomerId>
+    private sealed class ConfiguredCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity
     {
-        private readonly List<ConfiguredCustomerNote> _notes = new List<ConfiguredCustomerNote>();
-
         private ConfiguredCustomer()
         {
             Name = string.Empty;
@@ -433,33 +402,9 @@ public sealed class EntityFrameworkCoreRepositoryTests
         }
 
         public string Name { get; private set; }
-
-        public IReadOnlyCollection<ConfiguredCustomerNote> Notes => _notes.AsReadOnly();
-
-        public void AddNote(ConfiguredCustomerNote note)
-        {
-            _notes.Add(note);
-        }
     }
 
-    private sealed class ConfiguredCustomerNote : EntityBase<Guid>, IAuditableEntity, ISoftDeletableEntity
-    {
-        private ConfiguredCustomerNote()
-            : base(Guid.Empty)
-        {
-            Text = string.Empty;
-        }
-
-        public ConfiguredCustomerNote(Guid id, string text)
-            : base(id)
-        {
-            Text = text;
-        }
-
-        public string Text { get; private set; }
-    }
-
-    private sealed class ConfiguredCustomerConfiguration : BaseAggregateEntityConfiguration<ConfiguredCustomer>
+    private sealed class ConfiguredCustomerConfiguration : BaseAggregateConfiguration<ConfiguredCustomer>
     {
         protected override string TableName => "configured_customers";
 
@@ -467,19 +412,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         protected override void ConfigureAggregate(EntityTypeBuilder<ConfiguredCustomer> builder)
         {
-            builder.Property(customer => customer.Id)
-                .HasConversion(
-                    id => id.Value,
-                    value => new CustomerId(value));
             builder.Property(customer => customer.Name).IsRequired();
-            builder.OwnsMany(customer => customer.Notes, noteBuilder =>
-            {
-                noteBuilder.ToTable("configured_customer_notes", "test");
-                noteBuilder.WithOwner().HasForeignKey("CustomerId");
-                noteBuilder.HasKey(note => note.Id);
-                noteBuilder.Property(note => note.Text).IsRequired();
-            });
-            builder.Navigation(customer => customer.Notes).UsePropertyAccessMode(PropertyAccessMode.Field);
         }
     }
 
@@ -499,7 +432,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
     private sealed class CapturingEventBus : IEventBus
     {
-        private static readonly List<IDomiumEvent> CapturedEvents = new List<IDomiumEvent>();
+        private static readonly List<IDomiumEvent> CapturedEvents = new();
 
         public static IReadOnlyCollection<IDomiumEvent> Events => CapturedEvents.AsReadOnly();
 

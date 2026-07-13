@@ -63,11 +63,11 @@ public sealed class TenancyTests
         using var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IDomiumTenantScopeFactory>();
 
-        var resolver = provider.GetRequiredService<IDomiumTenantNameResolver>();
+        var resolver = provider.GetRequiredService<IDomiumTenantResolver>();
 
         using (scopeFactory.BeginScope("acme"))
         {
-            Assert.Equal("acme", resolver.ResolveTenantName());
+            Assert.Equal("acme", resolver.ResolveTenantId());
         }
     }
 
@@ -103,12 +103,12 @@ public sealed class TenancyTests
         services.AddDomium();
 
         using var provider = services.BuildServiceProvider();
-        var resolver = provider.GetRequiredService<IDomiumTenantConnectionStringResolver>();
+        var resolver = provider.GetRequiredService<IDomiumTenantConnectionResolver>();
 
-        var connectionString = resolver.Resolve(
+        var connectionString = resolver.ResolveFor(
+            "Acme",
             "tracking",
-            "Host=localhost;Database={DatabaseName};Tenant={TenantName}",
-            "Acme");
+            "Host=localhost;Database={DatabaseName};Tenant={TenantName}");
 
         Assert.Equal("Host=localhost;Database=acme_tracking;Tenant=acme", connectionString);
     }
