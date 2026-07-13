@@ -34,6 +34,8 @@
     <ProjectReference Include="..\..\Extensions\Domium.Extensions.DependencyInjection\Domium.Extensions.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\Application\Domium.Application.Abstractions\Domium.Application.Abstractions.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
+    <ProjectReference Include="..\..\Caching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain\Domium.Domain.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Persistence\Domium.Persistence.Abstractions\Domium.Persistence.Abstractions.csproj" />
@@ -47,6 +49,9 @@
     <ProjectReference Include="..\..\Facade\Domium.Facade\Domium.Facade.csproj" />
     <ProjectReference Include="..\..\Idempotency\Domium.Idempotency.Abstractions\Domium.Idempotency.Abstractions.csproj" />
     <ProjectReference Include="..\..\Idempotency\Domium.Idempotency\Domium.Idempotency.csproj" />
+    <ProjectReference Include="..\..\Querying\Domium.Querying.Abstractions\Domium.Querying.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Querying\Domium.Querying\Domium.Querying.csproj" />
+    <ProjectReference Include="..\..\Querying\Domium.Querying.EntityFrameworkCore\Domium.Querying.EntityFrameworkCore.csproj" />
   </ItemGroup>
 
 </Project>

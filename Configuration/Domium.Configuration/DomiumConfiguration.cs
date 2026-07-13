@@ -11,7 +11,6 @@ using Domium.Application.Query;
 using Domium.Application.Query.Pipelines.Behaviors;
 using Domium.Caching.Abstractions;
 using Domium.Caching.Memory;
-using Domium.Caching.Redis;
 using Domium.Eventing;
 using Domium.Eventing.Abstractions.External;
 using Domium.Eventing.Abstractions.Internal;
@@ -25,7 +24,6 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Scrutor;
-using StackExchange.Redis;
 using System.Reflection;
 
 namespace Domium.Configuration;
@@ -362,38 +360,21 @@ public static class DomiumConfiguration
 
     /// <summary>
     /// Registers the <see cref="IDomiumCache"/> store described by <paramref name="options"/>.
-    /// The first registration wins, so query caching and idempotency share one store when
-    /// they use the same provider.
+    /// Providers contribute the factory via their Use* extensions (UseMemory/UseRedis);
+    /// when nothing was configured the in-memory store backs the feature. The first
+    /// registration wins, so query caching and idempotency share one store.
     /// </summary>
     private static void EnsureDomiumCache(IServiceCollection services, DomiumCacheStoreOptions options)
     {
-        ValidateCacheStoreOptions(options, "Domium cache");
+        if (options == null) throw new ArgumentNullException(nameof(options));
 
-        if (options.Provider == DomiumCacheProvider.Memory)
-        {
-            services.AddMemoryCache();
-            services.TryAddSingleton<IDomiumCache>(
-                provider => new MemoryDomiumCache(provider.GetRequiredService<IMemoryCache>()));
-            return;
-        }
+        // Backs the default store; harmless when a custom store factory is configured.
+        services.AddMemoryCache();
 
-        if (options.Provider == DomiumCacheProvider.Redis)
-        {
-            if (options.RedisConnectionFactory is not null)
-            {
-                services.TryAddSingleton<IConnectionMultiplexer>(options.RedisConnectionFactory);
-            }
-            else
-            {
-                var connectionString = options.RedisConnectionString;
-                services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
-            }
+        var storeFactory = options.StoreFactory
+            ?? (provider => new MemoryDomiumCache(provider.GetRequiredService<IMemoryCache>()));
 
-            services.AddDomiumRedisCache();
-            return;
-        }
-
-        throw new InvalidOperationException($"Unsupported cache provider '{options.Provider}'.");
+        services.TryAddSingleton<IDomiumCache>(storeFactory);
     }
 
     private static void ValidateCachingOptions(DomiumCachingOptions options)
@@ -405,23 +386,6 @@ public static class DomiumConfiguration
             throw new ArgumentOutOfRangeException(
                 nameof(options.DefaultExpiration),
                 "Default cache expiration must be greater than zero.");
-        }
-
-        ValidateCacheStoreOptions(options.Store, "Query caching");
-    }
-
-    private static void ValidateCacheStoreOptions(
-        DomiumCacheStoreOptions options,
-        string featureName)
-    {
-        if (options == null) throw new ArgumentNullException(nameof(options));
-
-        if (options.Provider == DomiumCacheProvider.Redis &&
-            options.RedisConnectionFactory == null &&
-            string.IsNullOrWhiteSpace(options.RedisConnectionString))
-        {
-            throw new InvalidOperationException(
-                $"{featureName} Redis store requires a non-empty Redis connection string or Redis connection factory.");
         }
     }
 
@@ -440,8 +404,6 @@ public static class DomiumConfiguration
         {
             throw new InvalidOperationException("Idempotency key prefix cannot be empty.");
         }
-
-        ValidateCacheStoreOptions(options.Store, "Idempotency");
     }
 
     private static void ValidateTransactionRegistration(IServiceCollection services)

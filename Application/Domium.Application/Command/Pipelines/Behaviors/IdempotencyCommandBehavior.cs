@@ -3,6 +3,7 @@ using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Caching.Abstractions;
 using Domium.Idempotency.Abstractions.Models;
 using Domium.Idempotency.Abstractions.Providers;
+using Microsoft.Extensions.Logging;
 
 namespace Domium.Application.Command.Pipelines.Behaviors;
 
@@ -15,13 +16,15 @@ namespace Domium.Application.Command.Pipelines.Behaviors;
 public sealed class IdempotencyCommandBehavior<TCommand>(
     IDomiumCache cache,
     IDomiumIdempotencyKeyProvider keyProvider,
-    DomiumIdempotencyBehaviorOptions options)
+    DomiumIdempotencyBehaviorOptions options,
+    ILogger<IdempotencyCommandBehavior<TCommand>> logger)
     : ICommandPipelineBehavior<TCommand>
     where TCommand : ICommand
 {
     private readonly IDomiumCache _cache = cache ?? throw new ArgumentNullException(nameof(cache));
     private readonly IDomiumIdempotencyKeyProvider _keyProvider = keyProvider ?? throw new ArgumentNullException(nameof(keyProvider));
     private readonly DomiumIdempotencyBehaviorOptions _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly ILogger<IdempotencyCommandBehavior<TCommand>> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public async Task HandleAsync(
         TCommand command,
@@ -41,6 +44,16 @@ public sealed class IdempotencyCommandBehavior<TCommand>(
 
             await next().ConfigureAwait(false);
             return;
+        }
+
+        // The memory store gives no cross-instance guarantee; a duplicate hitting another
+        // instance will still execute. Detected by type name so the application layer does
+        // not have to reference the memory provider package.
+        if (_cache.GetType().Name == "MemoryDomiumCache" && IdempotencyStoreWarning.ShouldWarn())
+        {
+            _logger.LogWarning(
+                "Idempotency is using the in-memory cache store, which only suppresses duplicates " +
+                "within this process. Use a distributed store (e.g. Redis) when running more than one instance.");
         }
 
         var key = _keyProvider.GetKey(command, _options.KeyPrefix);
@@ -87,4 +100,12 @@ public sealed class IdempotencyCommandBehavior<TCommand>(
 
         await _cache.SetAsync(key, completedEntry, entryOptions, cancellationToken).ConfigureAwait(false);
     }
+}
+
+/// <summary>Process-wide once-only latch for the non-distributed-store warning.</summary>
+internal static class IdempotencyStoreWarning
+{
+    private static int _warned;
+
+    public static bool ShouldWarn() => Interlocked.Exchange(ref _warned, 1) == 0;
 }

@@ -1,6 +1,7 @@
 using Domium.Application.Abstractions.Command;
 using Domium.Caching.Abstractions;
-using Domium.Configuration;
+using Domium.Caching.Memory;
+using Domium.Caching.Redis;
 using Domium.Extensions.DependencyInjection;
 using Domium.Idempotency.Abstractions.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -210,11 +211,7 @@ public sealed class IdempotencyRegistrationTests
 
         var exception = Record.Exception(() =>
             services.AddDomium(options =>
-                options.UseIdempotency(idempotency =>
-                {
-                    idempotency.Store.Provider = DomiumCacheProvider.Redis;
-                    idempotency.Store.RedisConnectionString = "localhost";
-                })));
+                options.UseIdempotency(idempotency => idempotency.Store.UseRedis("localhost"))));
 
         Assert.Null(exception);
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCache));
@@ -225,15 +222,11 @@ public sealed class IdempotencyRegistrationTests
     {
         var services = new ServiceCollection();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var exception = Assert.Throws<ArgumentException>(() =>
             services.AddDomium(options =>
-                options.UseIdempotency(idempotency =>
-                {
-                    idempotency.Store.Provider = DomiumCacheProvider.Redis;
-                    idempotency.Store.RedisConnectionString = string.Empty;
-                })));
+                options.UseIdempotency(idempotency => idempotency.Store.UseRedis(string.Empty))));
 
-        Assert.Contains("Idempotency Redis store requires a non-empty Redis connection string", exception.Message);
+        Assert.Contains("Redis connection string cannot be empty", exception.Message);
     }
 
     [Fact]

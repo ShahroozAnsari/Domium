@@ -1,4 +1,5 @@
 using System;
+using Domium.Caching.Abstractions;
 
 namespace Domium.Configuration;
 

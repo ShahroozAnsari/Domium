@@ -1,13 +1,14 @@
 # Persistence
 
-Domium persistence is intentionally provider-selectable. The core abstraction is small and aggregate-focused, while provider-specific packages expose the capabilities that only that provider can honestly support.
+Domium persistence is provider-selectable. The core contract is small and aggregate-focused;
+provider packages expose only what that provider can honestly support.
 
-## Core Contract
+## Core contracts
 
 `Domium.Persistence.Abstractions` contains:
 
 ```csharp
-public interface IRepository<TAggregate, TId>
+public interface IRepository<TAggregate, in TId>
     where TAggregate : class, IAggregateRoot<TId>
     where TId : IAggregateId
 {
@@ -18,146 +19,90 @@ public interface IRepository<TAggregate, TId>
 }
 ```
 
-This is not a general querying abstraction. It is the command-side aggregate repository.
-
-## EF Core Provider
-
-Register EF Core with Domium:
+LINQ-capable providers add specification-based reads:
 
 ```csharp
-services.AddDomiumEntityFrameworkCore<AppDbContext>(options =>
+public interface ISpecificationRepository<TAggregate, in TId> : IRepository<TAggregate, TId>
 {
-    options.UseSqlServer(connectionString);
-});
-
-services.AddDomium(options => options.UseTransactions());
+    Task<IReadOnlyList<TAggregate>> FindAsync(ISpecification<TAggregate> specification, ...);
+    Task<int> CountAsync(ISpecification<TAggregate> specification, ...);
+    Task<bool> AnyAsync(ISpecification<TAggregate> specification, ...);
+}
 ```
 
-`DomiumDbContext` provides:
+This is the command-side aggregate repository — not a general querying abstraction. Read
+models query their own (no-tracking) DbContext directly.
 
-- domain event collection and dispatch
-- post-commit dispatch when used with `EfUnitOfWork`
-- audit metadata updates for auditable entities
-- soft delete conversion for soft-deletable entities
+`IUnitOfWork` exposes `Begin/Commit/Rollback` plus `ExecuteAsync(operation)`, which runs the
+whole unit through the provider's execution strategy — use it (the built-in
+TransactionCommandBehavior does) so `EnableRetryOnFailure` works. Begin/Commit pairs may
+nest; only the outermost pair commits.
 
-EF-specific query specifications are exposed through:
+## EF Core provider
 
 ```csharp
-IEfRepository<TAggregate, TId>
+services.AddDomiumEntityFrameworkCore<OrdersDbContext>(options => options.UseNpgsql(connectionString));
 ```
 
-Example:
+That single call registers the context as `DomiumDbContext`, the unit of work, the generic
+repositories, and the interceptors below.
+
+### Model discovery is explicit
+
+A `DomiumDbContext` declares which assemblies hold its entity configurations:
 
 ```csharp
-public sealed class ActiveOrdersSpecification : Specification<Order>
+public sealed class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DomiumDbContext(options)
 {
-    public ActiveOrdersSpecification()
-        : base(order => order.IsActive)
+    protected override IEnumerable<Assembly> GetConfigurationAssemblies()
     {
-        ApplyOrderBy(order => order.Number);
+        yield return typeof(OrdersInfrastructureMarker).Assembly;
     }
 }
 ```
 
-```csharp
-var orders = await efRepository.FindAsync(
-    new ActiveOrdersSpecification(),
-    cancellationToken);
-```
+Nothing outside those assemblies enters the model — bounded contexts stay isolated, and the
+model does not depend on assembly load order.
 
-## Dapper Provider
+### What the interceptors do on SaveChanges
 
-Dapper registration starts with a connection factory:
+| Concern | Behavior |
+| --- | --- |
+| Domain events | Buffered events from tracked aggregates are published **before** the save, in the same scope and transaction; handler changes persist atomically with the aggregate. Handlers must not call SaveChanges (enforced). |
+| Auditing | `IAuditableEntity` gets CreatedAt/By and ModifiedAt/By shadow columns. |
+| Soft delete | `ISoftDeletableEntity` deletes become updates (IsDeleted/DeletedAt/DeletedBy) and a global query filter hides deleted rows (`IgnoreQueryFilters()` to opt out). |
+| Optimistic concurrency | `IConcurrencyProtectedEntity` gets a Version concurrency token, bumped on every update/delete; stale writers get `DomiumConcurrencyException`. |
+| Domain services / event bus | Materialized aggregates receive `IEventBus` and `IDomainService` instances via property injection. |
 
-```csharp
-public sealed class SqlConnectionFactory(string connectionString)
-    : IDapperConnectionFactory
-{
-    public ValueTask<DbConnection> CreateConnectionAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return ValueTask.FromResult<DbConnection>(
-            new SqlConnection(connectionString));
-    }
-}
-```
+### Mapping
 
-```csharp
-services.AddDomiumDapper(options =>
-{
-    options.UseConnectionFactory<SqlConnectionFactory>();
-});
-```
+Derive from `BaseAggregateConfiguration<T>`: it maps table/schema, converts strongly-typed
+Guid ids (compiled, no per-row reflection), and adds the shadow columns and query filter for
+the markers above.
 
-Use `IDapperSqlExecutor` for explicit SQL:
+### Migrations for tenant-per-database
 
-```csharp
-var order = await sql.QuerySingleOrDefaultAsync<OrderReadModel>(
-    "select Id, Number from Orders where Id = @Id",
-    new { Id = query.Id },
-    cancellationToken);
-```
+`EnsureCreated` can only create a schema — it can never upgrade one. Author EF migrations
+(each persistence project ships an `IDesignTimeDbContextFactory`), then:
 
-## Dapper Aggregate Repository
+- **Provisioning:** `DomiumTenantMigrations.MigrateOrCreateAsync(dbContext)` applies
+  migrations when they exist and falls back to EnsureCreated while none are authored.
+- **Deploys:** loop every tenant database with
+  `DomiumTenantMigrations.MigrateTenantsAsync(tenantIds, tenantId => CreateContextFor(tenantId))`,
+  resolving each connection via `IDomiumTenantConnectionResolver.ResolveFor(...)`.
 
-Dapper can also provide `IRepository<TAggregate, TId>`, but only when the application supplies explicit aggregate mapping.
+## Dapper provider
+
+`Domium.Persistence.Dapper` implements the same `IRepository` core over explicit SQL
+mappers, plus a session/unit-of-work (with the same nesting semantics) for hand-written SQL.
+
+## Multi-tenant registration
 
 ```csharp
-services.AddScoped<IDapperAggregateMapper<Order, OrderId>, OrderMapper>();
-
-services.AddDomiumDapper(options =>
-{
-    options
-        .UseConnectionFactory<SqlConnectionFactory>()
-        .UseAggregateRepositories();
-});
+services.AddDomiumTenantDbContext<OrdersDbContext>(
+    "orders", baseConnectionString, (options, cs) => options.UseNpgsql(cs));
 ```
 
-Mapper example:
-
-```csharp
-public sealed class OrderMapper : IDapperAggregateMapper<Order, OrderId>
-{
-    public string SelectByIdSql => "select Id, Number from Orders where Id = @Id";
-    public string InsertSql => "insert into Orders (Id, Number) values (@Id, @Number)";
-    public string UpdateSql => "update Orders set Number = @Number where Id = @Id";
-    public string DeleteSql => "delete from Orders where Id = @Id";
-
-    public object GetIdParameters(OrderId id) => new { Id = id.Value };
-    public object GetInsertParameters(Order aggregate) => new { Id = aggregate.Id.Value, aggregate.Number };
-    public object GetUpdateParameters(Order aggregate) => new { Id = aggregate.Id.Value, aggregate.Number };
-    public object GetDeleteParameters(Order aggregate) => new { Id = aggregate.Id.Value };
-
-    public Order Map(object row)
-    {
-        var values = (IDictionary<string, object>)row;
-        return new Order(
-            new OrderId((Guid)values["Id"]),
-            Convert.ToString(values["Number"]) ?? string.Empty);
-    }
-}
-```
-
-This keeps Dapper explicit and avoids pretending it can infer aggregate graphs, relationships, and invariants automatically.
-
-## Choosing EF Core, Dapper, Or Both
-
-Use EF Core when:
-
-- you want change tracking
-- you want rich aggregate graph persistence
-- you want LINQ/specification querying
-- your write model maps naturally to EF
-
-Use Dapper when:
-
-- you want explicit SQL
-- you want lightweight read models
-- you want full control over aggregate persistence SQL
-- your application already owns stored procedures or hand-tuned queries
-
-Use both when:
-
-- EF Core is your write model
-- Dapper is your read model/query side
-- or different bounded contexts have different persistence needs
+The connection is resolved per request from the ambient tenant and the
+`{tenant}_{service}` naming convention. One `DomiumDbContext` per process is the design
+principle — a service owns one write model; separate services own separate databases.

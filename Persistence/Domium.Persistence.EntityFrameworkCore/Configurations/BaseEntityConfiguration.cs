@@ -101,6 +101,15 @@ public abstract class BaseAggregateConfiguration<TEntity> : IEntityTypeConfigura
         {
             builder.Property<string?>(DomiumShadowPropertyNames.DeletedBy).HasMaxLength(ActorMaxLength);
         }
+
+        if (typeof(IConcurrencyProtectedEntity).IsAssignableFrom(typeof(TEntity)))
+        {
+            // Optimistic concurrency: the interceptor bumps this on every update/delete, so
+            // a writer holding a stale version fails with DomiumConcurrencyException.
+            builder.Property<long>(DomiumShadowPropertyNames.Version)
+                .IsConcurrencyToken()
+                .HasDefaultValue(0L);
+        }
     }
 
     private static string GetSchemaName()

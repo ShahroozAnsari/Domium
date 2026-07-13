@@ -12,7 +12,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
     <PackageReference Include="Scrutor" Version="7.0.0" />
-    <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,7 +19,6 @@
     <ProjectReference Include="..\..\Application\Domium.Application\Domium.Application.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Abstractions\Domium.Caching.Abstractions.csproj" />
     <ProjectReference Include="..\..\Caching\Domium.Caching.Memory\Domium.Caching.Memory.csproj" />
-    <ProjectReference Include="..\..\Caching\Domium.Caching.Redis\Domium.Caching.Redis.csproj" />
     <ProjectReference Include="..\..\Domain\Domium.Domain.Abstractions\Domium.Domain.Abstractions.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing.Abstractions\Domium.Eventing.Abstractions.csproj" />
     <ProjectReference Include="..\..\Eventing\Domium.Eventing\Domium.Eventing.csproj" />

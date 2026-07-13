@@ -200,6 +200,54 @@ public sealed class EntityFrameworkCoreRepositoryTests
         Assert.Single(await dbContext.ConfiguredCustomers.IgnoreQueryFilters().ToListAsync());
     }
 
+    [Fact]
+    public async Task Concurrency_protected_aggregate_rejects_stale_writes()
+    {
+        await using var provider = CreateProvider();
+        var dbContext = provider.GetRequiredService<TestDbContext>();
+        var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
+        var customer = new ConfiguredCustomer(new CustomerId(Guid.NewGuid()), "Ada");
+
+        dbContext.ConfiguredCustomers.Add(customer);
+        await dbContext.SaveChangesAsync();
+
+        // First legitimate update bumps the version token from 0 to 1.
+        dbContext.Entry(customer).Property(nameof(ConfiguredCustomer.Name)).CurrentValue = "Ada Lovelace";
+        dbContext.Entry(customer).State = EntityState.Modified;
+        await dbContext.SaveChangesAsync();
+
+        // Simulate a stale writer that still holds version 0.
+        dbContext.Entry(customer).Property<long>(DomiumShadowPropertyNames.Version).OriginalValue = 0;
+        dbContext.Entry(customer).State = EntityState.Modified;
+
+        await unitOfWork.BeginAsync();
+        await Assert.ThrowsAsync<DomiumConcurrencyException>(() => unitOfWork.CommitAsync());
+    }
+
+    [Fact]
+    public async Task UnitOfWork_ExecuteAsync_commits_the_unit_and_rolls_back_on_failure()
+    {
+        await using var provider = CreateProvider();
+        var repository = provider.GetRequiredService<IRepository<Customer, CustomerId>>();
+        var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
+        var id = new CustomerId(Guid.NewGuid());
+
+        await unitOfWork.ExecuteAsync(() => repository.AddAsync(new Customer(id, "Ada", true)));
+
+        Assert.NotNull(await repository.GetByIdAsync(id));
+
+        var failingId = new CustomerId(Guid.NewGuid());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            unitOfWork.ExecuteAsync(async () =>
+            {
+                await repository.AddAsync(new Customer(failingId, "Grace", true));
+                throw new InvalidOperationException("Handler failed.");
+            }));
+
+        // The failed unit never reached SaveChanges, so nothing was persisted.
+        Assert.Null(await repository.GetByIdAsync(failingId));
+    }
+
     private static ServiceProvider CreateProvider()
     {
         return CreateProvider<CapturingEventBus>(currentUserId: null);
@@ -388,7 +436,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
         public string Name { get; private set; }
     }
 
-    private sealed class ConfiguredCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity
+    private sealed class ConfiguredCustomer : AggregateRoot<CustomerId>, IAuditableEntity, ISoftDeletableEntity, IConcurrencyProtectedEntity
     {
         private ConfiguredCustomer()
         {

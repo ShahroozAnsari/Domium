@@ -4,12 +4,17 @@ using Domium.Persistence.Abstractions;
 
 namespace Domium.Application.Command.Pipelines.Behaviors;
 
+/// <summary>
+/// Wraps the rest of the pipeline in a unit of work. Delegating to
+/// <see cref="IUnitOfWork.ExecuteAsync"/> keeps the transaction compatible with retrying
+/// execution strategies and centralizes rollback semantics in the provider.
+/// </summary>
 public sealed class TransactionCommandBehavior<TCommand>(IUnitOfWork unitOfWork) : ICommandPipelineBehavior<TCommand>
     where TCommand : ICommand
 {
     private readonly IUnitOfWork _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
 
-    public async Task HandleAsync(
+    public Task HandleAsync(
         TCommand command,
         CancellationToken cancellationToken,
         CommandHandlerDelegate next)
@@ -17,20 +22,7 @@ public sealed class TransactionCommandBehavior<TCommand>(IUnitOfWork unitOfWork)
         if (command == null) throw new ArgumentNullException(nameof(command));
         if (next == null) throw new ArgumentNullException(nameof(next));
 
-        await _unitOfWork.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            await next().ConfigureAwait(false);
-            await _unitOfWork.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            // The incoming token may already be cancelled; the compensating rollback must
-            // still run, so it gets a token that cannot be cancelled.
-            await _unitOfWork.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-            throw;
-        }
+        return _unitOfWork.ExecuteAsync(() => next(), cancellationToken);
     }
 }
 
@@ -48,18 +40,12 @@ public sealed class TransactionCommandBehavior<TCommand, TResult>(IUnitOfWork un
         if (command == null) throw new ArgumentNullException(nameof(command));
         if (next == null) throw new ArgumentNullException(nameof(next));
 
-        await _unitOfWork.BeginAsync(cancellationToken).ConfigureAwait(false);
+        var result = default(TResult)!;
 
-        try
-        {
-            var result = await next().ConfigureAwait(false);
-            await _unitOfWork.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return result;
-        }
-        catch
-        {
-            await _unitOfWork.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-            throw;
-        }
+        await _unitOfWork.ExecuteAsync(
+            async () => result = await next().ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
+
+        return result;
     }
 }

@@ -15,4 +15,6 @@ public static class DomiumShadowPropertyNames
     public const string DeletedAt = nameof(DeletedAt);
 
     public const string DeletedBy = nameof(DeletedBy);
+
+    public const string Version = nameof(Version);
 }

@@ -56,4 +56,7 @@
   <Folder Name="/Tests/">
     <Project Path="Tests/Domium.Tests/Domium.Tests.csproj" />
   </Folder>
+  <Folder Name="/Benchmarks/">
+    <Project Path="Benchmarks/Domium.Benchmarks/Domium.Benchmarks.csproj" />
+  </Folder>
 </Solution>

@@ -10,7 +10,7 @@ namespace Domium.Eventing.MassTransit;
 /// </summary>
 public sealed class MassTransitExternalEventPublisher(IPublishEndpoint publishEndpoint) : IExternalEventPublisher
 {
-    public Task PublishAsync<TExternalEvent>(
+    public async Task PublishAsync<TExternalEvent>(
         TExternalEvent externalEvent,
         CancellationToken cancellationToken = default)
         where TExternalEvent : class, IExternalEvent
@@ -29,11 +29,21 @@ public sealed class MassTransitExternalEventPublisher(IPublishEndpoint publishEn
         activity?.SetTag("domium.event.name", eventName);
         activity?.SetTag("domium.event.id", externalEvent.EventId);
 
+        try
+        {
+            await publishEndpoint.Publish(externalEvent, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+            throw;
+        }
+
+        // Counted only after the broker accepted the message, so the metric reflects
+        // events actually published rather than attempts.
         DomiumTelemetry.ExternalEventsPublished.Add(
             1,
             new KeyValuePair<string, object?>("domium.event.name", eventName),
             new KeyValuePair<string, object?>("domium.event.provider", "masstransit"));
-
-        return publishEndpoint.Publish(externalEvent, cancellationToken);
     }
 }

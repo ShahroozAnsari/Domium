@@ -17,12 +17,14 @@ public sealed class CommandBus(IServiceProvider serviceProvider) : ICommandBus
         if (command == null) throw new ArgumentNullException(nameof(command));
 
         var handler = serviceProvider.GetRequiredService<ICommandHandler<TCommand>>();
-        var behaviors = serviceProvider.GetServices<ICommandPipelineBehavior<TCommand>>().Reverse().ToArray();
+        var behaviors = serviceProvider.GetServices<ICommandPipelineBehavior<TCommand>>().ToArray();
 
         CommandHandlerDelegate pipeline = () => handler.HandleAsync(command, cancellationToken);
 
-        foreach (var behavior in behaviors)
+        // Wrap innermost-first so the first-registered behavior ends up outermost.
+        for (var i = behaviors.Length - 1; i >= 0; i--)
         {
+            var behavior = behaviors[i];
             var next = pipeline;
             pipeline = () => behavior.HandleAsync(command, cancellationToken, next);
         }
@@ -38,15 +40,13 @@ public sealed class CommandBus(IServiceProvider serviceProvider) : ICommandBus
         if (command == null) throw new ArgumentNullException(nameof(command));
 
         var handler = serviceProvider.GetRequiredService<ICommandHandler<TCommand, TResult>>();
-        var behaviors = serviceProvider
-            .GetServices<ICommandPipelineBehavior<TCommand, TResult>>()
-            .Reverse()
-            .ToArray();
+        var behaviors = serviceProvider.GetServices<ICommandPipelineBehavior<TCommand, TResult>>().ToArray();
 
         CommandHandlerDelegate<TResult> pipeline = () => handler.HandleAsync(command, cancellationToken);
 
-        foreach (var behavior in behaviors)
+        for (var i = behaviors.Length - 1; i >= 0; i--)
         {
+            var behavior = behaviors[i];
             var next = pipeline;
             pipeline = () => behavior.HandleAsync(command, cancellationToken, next);
         }

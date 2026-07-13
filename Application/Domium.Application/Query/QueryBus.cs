@@ -19,15 +19,14 @@ public sealed class QueryBus(IServiceProvider serviceProvider) : IQueryBus
         if (query == null) throw new ArgumentNullException(nameof(query));
 
         var handler = serviceProvider.GetRequiredService<IQueryHandler<TQuery, TResult>>();
-        var behaviors = serviceProvider
-            .GetServices<IQueryPipelineBehavior<TQuery, TResult>>()
-            .Reverse()
-            .ToArray();
+        var behaviors = serviceProvider.GetServices<IQueryPipelineBehavior<TQuery, TResult>>().ToArray();
 
         QueryHandlerDelegate<TResult> pipeline = () => handler.HandleAsync(query, cancellationToken);
 
-        foreach (var behavior in behaviors)
+        // Wrap innermost-first so the first-registered behavior ends up outermost.
+        for (var i = behaviors.Length - 1; i >= 0; i--)
         {
+            var behavior = behaviors[i];
             var next = pipeline;
             pipeline = () => behavior.HandleAsync(query, cancellationToken, next);
         }

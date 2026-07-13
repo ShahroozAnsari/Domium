@@ -109,6 +109,7 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<IDomiumCurrentUserAccessor, NullDomiumCurrentUserAccessor>();
         services.TryAddScoped<SoftDeleteSaveChangesInterceptor>();
         services.TryAddScoped<AuditableSaveChangesInterceptor>();
+        services.TryAddScoped<ConcurrencyVersionSaveChangesInterceptor>();
         services.TryAddScoped<DomainServiceMaterializationInterceptor>();
         services.TryAddScoped<DomainEventDispatchInterceptor>();
 
@@ -122,6 +123,7 @@ public static class ServiceCollectionExtensions
         options.AddInterceptors(
             provider.GetRequiredService<SoftDeleteSaveChangesInterceptor>(),
             provider.GetRequiredService<AuditableSaveChangesInterceptor>(),
+            provider.GetRequiredService<ConcurrencyVersionSaveChangesInterceptor>(),
             provider.GetRequiredService<DomainServiceMaterializationInterceptor>(),
             provider.GetRequiredService<DomainEventDispatchInterceptor>());
     }

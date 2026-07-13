@@ -1,6 +1,6 @@
 using Domium.Application.Abstractions.Query;
 using Domium.Caching.Abstractions;
-using Domium.Configuration;
+using Domium.Caching.Redis;
 using Domium.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -107,11 +107,7 @@ public sealed class CachingRegistrationTests
 
         var exception = Record.Exception(() =>
             services.AddDomium(options =>
-                options.UseCaching(cacheOptions =>
-                {
-                    cacheOptions.Store.Provider = DomiumCacheProvider.Redis;
-                    cacheOptions.Store.RedisConnectionString = "localhost";
-                })));
+                options.UseCaching(cacheOptions => cacheOptions.Store.UseRedis("localhost"))));
 
         Assert.Null(exception);
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IDomiumCache));
@@ -122,15 +118,11 @@ public sealed class CachingRegistrationTests
     {
         var services = new ServiceCollection();
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var exception = Assert.Throws<ArgumentException>(() =>
             services.AddDomium(options =>
-                options.UseCaching(cacheOptions =>
-                {
-                    cacheOptions.Store.Provider = DomiumCacheProvider.Redis;
-                    cacheOptions.Store.RedisConnectionString = string.Empty;
-                })));
+                options.UseCaching(cacheOptions => cacheOptions.Store.UseRedis(string.Empty))));
 
-        Assert.Contains("Query caching Redis store requires a non-empty Redis connection string", exception.Message);
+        Assert.Contains("Redis connection string cannot be empty", exception.Message);
     }
 
     public sealed record CountingCacheableQuery : IQuery<CountingResult>, ICacheableQuery

@@ -13,6 +13,8 @@ namespace Domium.Querying.Internal;
 /// </summary>
 internal static class SortExpressionBuilder
 {
+    private const int MaxSortKeys = 8;
+
     private static readonly MethodInfo OrderBy = QueryableMethod(nameof(Queryable.OrderBy));
     private static readonly MethodInfo OrderByDescending = QueryableMethod(nameof(Queryable.OrderByDescending));
     private static readonly MethodInfo ThenBy = QueryableMethod(nameof(Queryable.ThenBy));
@@ -21,9 +23,15 @@ internal static class SortExpressionBuilder
     public static IQueryable<T> Apply<T>(IQueryable<T> query, string sortBy)
     {
         var ordered = false;
+        var applied = 0;
 
         foreach (var rawKey in sortBy.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
+            if (++applied > MaxSortKeys)
+            {
+                throw new ArgumentException($"Too many sort keys; at most {MaxSortKeys} are allowed per request.");
+            }
+
             var key = rawKey.Trim();
             var descending = key.StartsWith("-", StringComparison.Ordinal);
             var field = descending ? key.Substring(1) : key;

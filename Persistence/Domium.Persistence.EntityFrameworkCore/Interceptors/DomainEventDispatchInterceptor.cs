@@ -15,6 +15,8 @@ public sealed class DomainEventDispatchInterceptor(IEventBus eventBus) : SaveCha
 {
     private const int MaxDispatchRounds = 10;
 
+    private bool _dispatching;
+
     public override InterceptionResult<int> SavingChanges(
         DbContextEventData eventData,
         InterceptionResult<int> result)
@@ -41,27 +43,45 @@ public sealed class DomainEventDispatchInterceptor(IEventBus eventBus) : SaveCha
             return;
         }
 
-        // Handlers may create new aggregates that buffer more events; keep draining until
-        // a round produces nothing (bounded to protect against event loops).
-        for (var round = 0; round < MaxDispatchRounds; round++)
+        if (_dispatching)
         {
-            var pending = dbContext.ChangeTracker
-                .Entries()
-                .Select(entry => entry.Entity)
-                .OfType<IDomiumEventSource>()
-                .SelectMany(source => source.DequeuePendingDomainEvents())
-                .ToArray();
-
-            if (pending.Length == 0)
-            {
-                return;
-            }
-
-            await eventBus.PublishAsync(pending, cancellationToken).ConfigureAwait(false);
+            // A handler called SaveChanges on the context it shares with the command —
+            // that breaks the single-transaction guarantee (and would recurse). Fail loudly.
+            throw new InvalidOperationException(
+                "SaveChanges was called from inside a domain event handler. Handlers share the " +
+                "command's DbContext and transaction; their changes are persisted by the ongoing " +
+                "SaveChanges, so they must not call SaveChanges themselves.");
         }
 
-        throw new InvalidOperationException(
-            $"Domain event dispatch did not settle after {MaxDispatchRounds} rounds; " +
-            "an event handler appears to raise events in a loop.");
+        _dispatching = true;
+        try
+        {
+            // Handlers may create new aggregates that buffer more events; keep draining until
+            // a round produces nothing (bounded to protect against event loops).
+            for (var round = 0; round < MaxDispatchRounds; round++)
+            {
+                var pending = dbContext.ChangeTracker
+                    .Entries()
+                    .Select(entry => entry.Entity)
+                    .OfType<IDomiumEventSource>()
+                    .SelectMany(source => source.DequeuePendingDomainEvents())
+                    .ToArray();
+
+                if (pending.Length == 0)
+                {
+                    return;
+                }
+
+                await eventBus.PublishAsync(pending, cancellationToken).ConfigureAwait(false);
+            }
+
+            throw new InvalidOperationException(
+                $"Domain event dispatch did not settle after {MaxDispatchRounds} rounds; " +
+                "an event handler appears to raise events in a loop.");
+        }
+        finally
+        {
+            _dispatching = false;
+        }
     }
 }

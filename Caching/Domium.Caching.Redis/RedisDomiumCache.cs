@@ -13,12 +13,18 @@ namespace Domium.Caching.Redis;
 /// sets ("domium:cache:tag:{tag}") holding the member keys. Tag sets carry a TTL at least as
 /// long as their newest member, so nothing leaks when entries expire naturally.
 /// </summary>
-public sealed class RedisDomiumCache(IConnectionMultiplexer connection) : IDomiumCache
+public sealed class RedisDomiumCache : IDomiumCache, IDisposable
 {
     private const string TagKeyPrefix = "domium:cache:tag:";
 
-    private readonly IConnectionMultiplexer _connection =
-        connection ?? throw new ArgumentNullException(nameof(connection));
+    private readonly IConnectionMultiplexer _connection;
+    private readonly bool _ownsConnection;
+
+    public RedisDomiumCache(IConnectionMultiplexer connection, bool ownsConnection = false)
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        _ownsConnection = ownsConnection;
+    }
 
     private IDatabase Database => _connection.GetDatabase();
 
@@ -82,4 +88,12 @@ public sealed class RedisDomiumCache(IConnectionMultiplexer connection) : IDomiu
     }
 
     private static string TagKey(string tag) => TagKeyPrefix + tag;
+
+    public void Dispose()
+    {
+        if (_ownsConnection)
+        {
+            _connection.Dispose();
+        }
+    }
 }

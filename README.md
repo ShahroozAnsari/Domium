@@ -395,11 +395,20 @@ services.AddDomiumOpenTelemetry();   // Domium.Observability.OpenTelemetry
 | `Domium.Observability` | The `"Domium"` `ActivitySource`, `Meter`, counters, histograms |
 | `Domium.Observability.OpenTelemetry` | One-call OpenTelemetry wiring |
 
+## Design principles & versioning
+
+- **One `DomiumDbContext` per process.** A service owns one write model; separate bounded
+  contexts with separate write models belong in separate services.
+- **Explicit beats scanned.** Model assemblies, application-service assemblies, and cache
+  providers are all declared, never discovered by accident.
+- Domium follows **SemVer**; pre-1.0 minor versions may break — every breaking change is
+  listed in [CHANGELOG.md](CHANGELOG.md).
+
 ## Target frameworks
 
 Contracts and provider-neutral packages target **netstandard2.1** so they can be consumed
 from any modern .NET runtime; packages bound to EF Core or ASP.NET target **net10.0**. Open
-`Domium.slnx` for the full solution.
+`Domium.slnx` for the full solution (benchmarks live in `Benchmarks/Domium.Benchmarks`).
 
 ## License
 

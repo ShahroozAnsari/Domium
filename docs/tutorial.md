@@ -35,7 +35,7 @@ public sealed class OrderId(Guid value) : AggregateId<Guid>(value);
 
 public sealed class Order : AggregateRoot<OrderId>
 {
-    private Order() : base(new OrderId(Guid.Empty))
+    private Order()
     {
         Number = string.Empty;
     }

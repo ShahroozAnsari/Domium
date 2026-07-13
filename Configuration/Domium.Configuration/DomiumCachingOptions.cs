@@ -1,3 +1,5 @@
+using Domium.Caching.Abstractions;
+
 namespace Domium.Configuration;
 
 public sealed class DomiumCachingOptions

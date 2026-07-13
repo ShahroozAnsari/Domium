@@ -1,4 +1,6 @@
+using Domium.Domain;
 using Domium.Persistence.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Domium.Persistence.EntityFrameworkCore;
@@ -7,6 +9,8 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// Entity Framework Core implementation of the Domium unit of work.
 /// Begin/Commit pairs may nest (e.g. a command handler dispatching another command); only
 /// the outermost pair opens, saves, and commits the database transaction.
+/// <see cref="ExecuteAsync"/> additionally runs the whole unit through the context's
+/// execution strategy, making it compatible with EnableRetryOnFailure.
 /// </summary>
 public sealed class EfUnitOfWork(DomiumDbContext dbContext) : IUnitOfWork, IAsyncDisposable
 {
@@ -37,7 +41,16 @@ public sealed class EfUnitOfWork(DomiumDbContext dbContext) : IUnitOfWork, IAsyn
             return;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new DomiumConcurrencyException(
+                "The aggregate was modified by another operation since it was loaded.",
+                exception);
+        }
 
         if (_transaction is not null)
         {
@@ -60,6 +73,44 @@ public sealed class EfUnitOfWork(DomiumDbContext dbContext) : IUnitOfWork, IAsyn
         await _transaction.DisposeAsync().ConfigureAwait(false);
         _transaction = null;
         _depth = 0;
+    }
+
+    public async Task ExecuteAsync(Func<Task> operation, CancellationToken cancellationToken = default)
+    {
+        if (operation == null) throw new ArgumentNullException(nameof(operation));
+
+        if (_transaction is not null)
+        {
+            // Already inside a unit of work (nested command) — join the ongoing transaction;
+            // the outermost owner saves and commits.
+            await RunUnitAsync(operation, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        // The execution strategy re-runs the whole unit on transient failures when a
+        // retrying strategy (EnableRetryOnFailure) is configured; the default strategy
+        // executes it exactly once.
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(
+            () => RunUnitAsync(operation, cancellationToken)).ConfigureAwait(false);
+    }
+
+    private async Task RunUnitAsync(Func<Task> operation, CancellationToken cancellationToken)
+    {
+        await BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await operation().ConfigureAwait(false);
+            await CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The incoming token may already be cancelled; the compensating rollback must
+            // still run, so it gets a token that cannot be cancelled.
+            await RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()

@@ -1,6 +1,5 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Domium.Querying.Abstractions;
 
@@ -30,10 +29,14 @@ public sealed class FilterCriteria
 
 /// <summary>
 /// Generic query options for filtering, sorting, and paging. Bind this as [FromQuery]
-/// on any Domium API endpoint.
+/// on any Domium API endpoint. Filter count and page size are bounded so a single
+/// request cannot turn into an unbounded amount of work.
 /// </summary>
 public sealed class QueryOptions
 {
+    /// <summary>Upper bound on the number of filter conditions a single request may carry.</summary>
+    public const int MaxFilterCount = 32;
+
     /// <summary>
     /// Packed filter syntax: "Field:Operator:Value,Field:Operator:Value".
     /// Example: "Price:Gt:100,Name:Contains:john,Category.Name:Eq:Shoes".
@@ -47,13 +50,18 @@ public sealed class QueryOptions
 
     public int Page { get; set; } = 1;
 
+    /// <summary>
+    /// Requested page size. Materializing extensions clamp this to their configured
+    /// maximum (200 by default), so clients cannot request unbounded pages.
+    /// </summary>
     public int PageSize { get; set; } = 20;
 
     /// <summary>
     /// Parses <see cref="Filters"/> into structured criteria. Malformed segments
     /// (wrong shape, unknown operator name) are silently skipped here; field/operator
     /// validity against a specific entity is checked later, in Domium.Querying, where
-    /// the entity's [Filterable] metadata is known.
+    /// the entity's [Filterable] metadata is known. Throws <see cref="ArgumentException"/>
+    /// when the request carries more than <see cref="MaxFilterCount"/> conditions.
     /// </summary>
     public IReadOnlyList<FilterCriteria> ParseFilters()
     {
@@ -74,6 +82,12 @@ public sealed class QueryOptions
             if (!Enum.TryParse<FilterOperator>(segments[1], true, out var op))
             {
                 continue;
+            }
+
+            if (list.Count >= MaxFilterCount)
+            {
+                throw new ArgumentException(
+                    $"Too many filter conditions; at most {MaxFilterCount} are allowed per request.");
             }
 
             list.Add(new FilterCriteria(segments[0].Trim(), op, segments[2].Trim()));
