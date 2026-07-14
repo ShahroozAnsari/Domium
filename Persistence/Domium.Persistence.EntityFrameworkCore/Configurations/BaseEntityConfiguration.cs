@@ -58,6 +58,12 @@ public abstract class BaseAggregateConfiguration<TEntity> : IEntityTypeConfigura
     {
         builder.HasKey("Id");
 
+        // Ids are client-generated (Guid.CreateVersion7() in the ctor), never store-generated.
+        // Without this, EF treats a non-default Guid key as an existing row and issues UPDATE
+        // instead of INSERT for entities added to a tracked graph (e.g. child collections),
+        // failing with "expected 1 row, affected 0".
+        builder.Property("Id").ValueGeneratedNever();
+
         var idType = typeof(TEntity).GetProperty("Id")?.PropertyType;
         if (idType is not null && typeof(IAggregateId<Guid>).IsAssignableFrom(idType))
         {
