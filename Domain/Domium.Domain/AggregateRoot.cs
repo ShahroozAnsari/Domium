@@ -15,16 +15,10 @@ namespace Domium.Domain;
 ///   and published by <c>DomainEventDispatchInterceptor</c> right before SaveChanges — still
 ///   inside the same scope and transaction.
 /// </summary>
-public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>, IDomiumEventSource
+public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     where TId : IAggregateId
 {
-    private readonly List<IDomiumEvent> _pendingEvents = new();
-
     protected AggregateRoot()
-    {
-    }
-
-    protected AggregateRoot(TId id) : base(id)
     {
     }
 
@@ -39,36 +33,21 @@ public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>,
     /// </summary>
     protected IEventBus? EventBus { get; private set; }
 
-    /// <inheritdoc />
-    public IReadOnlyCollection<IDomiumEvent> PendingDomainEvents => _pendingEvents;
+
 
     /// <summary>
     /// Publishes the event immediately when a bus is attached; otherwise buffers it for
     /// dispatch just before SaveChanges (same scope, same transaction).
     /// </summary>
-    protected void RaiseEvent(IDomiumEvent @event)
+    protected async Task RaiseEvent(IDomiumEvent @event)
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-        if (EventBus is not null)
-        {
-            EventBus.PublishAsync(@event).GetAwaiter().GetResult();
-            return;
-        }
+      
+            await EventBus.PublishAsync(@event);
 
-        _pendingEvents.Add(@event);
-    }
+        
 
-    /// <inheritdoc />
-    IReadOnlyList<IDomiumEvent> IDomiumEventSource.DequeuePendingDomainEvents()
-    {
-        if (_pendingEvents.Count == 0)
-        {
-            return Array.Empty<IDomiumEvent>();
-        }
 
-        var drained = _pendingEvents.ToArray();
-        _pendingEvents.Clear();
-        return drained;
-    }
+    }  
 }

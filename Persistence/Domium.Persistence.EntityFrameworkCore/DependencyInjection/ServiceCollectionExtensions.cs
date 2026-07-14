@@ -111,7 +111,6 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<AuditableSaveChangesInterceptor>();
         services.TryAddScoped<ConcurrencyVersionSaveChangesInterceptor>();
         services.TryAddScoped<DomainServiceMaterializationInterceptor>();
-        services.TryAddScoped<DomainEventDispatchInterceptor>();
 
         return services;
     }
@@ -124,7 +123,6 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<SoftDeleteSaveChangesInterceptor>(),
             provider.GetRequiredService<AuditableSaveChangesInterceptor>(),
             provider.GetRequiredService<ConcurrencyVersionSaveChangesInterceptor>(),
-            provider.GetRequiredService<DomainServiceMaterializationInterceptor>(),
-            provider.GetRequiredService<DomainEventDispatchInterceptor>());
+            provider.GetRequiredService<DomainServiceMaterializationInterceptor>());
     }
 }

@@ -8,8 +8,8 @@ namespace Domium.Persistence.EntityFrameworkCore;
 /// assemblies contain their <c>IEntityConfiguration</c> classes by overriding
 /// <see cref="GetConfigurationAssemblies"/> — the model is built only from what the
 /// context explicitly owns, keeping bounded contexts isolated and the model independent
-/// of assembly load order. Domain events are dispatched by
-/// <see cref="DomainEventDispatchInterceptor"/> right before SaveChanges.
+/// of assembly load order. Domain events are published immediately through the aggregate's
+/// injected <c>IEventBus</c>.
 /// </summary>
 public abstract class DomiumDbContext : DbContext
 {
