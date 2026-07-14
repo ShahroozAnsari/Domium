@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 
 namespace Domium.Application.Abstractions.Exceptions;
 
-public class DomiumApplicationException : ApplicationException
+public class DomiumApplicationException : Exception
 {
 }
 

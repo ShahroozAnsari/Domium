@@ -1,9 +1,9 @@
-﻿
+
 
 using System;
 
 namespace Domium.Application.Abstractions.Exceptions;
 
-public class DomiumNotFoundApplicationException : ApplicationException
+public class DomiumNotFoundApplicationException : DomiumApplicationException
 {
 }
