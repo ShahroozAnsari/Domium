@@ -18,7 +18,13 @@ namespace Domium.Domain;
 public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     where TId : IAggregateId
 {
+    private readonly List<IDomiumEvent> _pendingDomainEvents = new();
+
     protected AggregateRoot()
+    {
+    }
+
+    protected AggregateRoot(TId id) : base(id)
     {
     }
 
@@ -33,7 +39,21 @@ public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     /// </summary>
     protected IEventBus? EventBus { get; private set; }
 
+    /// <summary>
+    /// Events raised while no bus was attached, awaiting dispatch just before SaveChanges.
+    /// </summary>
+    public IReadOnlyList<IDomiumEvent> PendingDomainEvents => _pendingDomainEvents;
 
+    /// <summary>
+    /// Returns the buffered events and clears the buffer. Called by the dispatch
+    /// interceptor right before SaveChanges, inside the same scope and transaction.
+    /// </summary>
+    public IReadOnlyList<IDomiumEvent> DequeuePendingDomainEvents()
+    {
+        var events = _pendingDomainEvents.ToArray();
+        _pendingDomainEvents.Clear();
+        return events;
+    }
 
     /// <summary>
     /// Publishes the event immediately when a bus is attached; otherwise buffers it for
@@ -43,11 +63,13 @@ public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-      
+        if (EventBus != null)
+        {
             await EventBus.PublishAsync(@event);
-
-        
-
-
-    }  
+        }
+        else
+        {
+            _pendingDomainEvents.Add(@event);
+        }
+    }
 }
