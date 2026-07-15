@@ -81,11 +81,6 @@ public sealed class InMemoryEventBus(
         }
     }
 
-    /// <summary>
-    /// Walks the event's type hierarchy, so a handler subscribed to a base event type also receives
-    /// every event derived from it, while a handler subscribed to a derived type receives only that
-    /// one. Stops as soon as a base type no longer satisfies the handler's event constraint.
-    /// </summary>
     private async Task DispatchAsync(
         Type openHandlerType,
         IDomiumEvent @event,
@@ -112,7 +107,6 @@ public sealed class InMemoryEventBus(
         }
     }
 
-    /// <summary>The event interface a handler's type argument is constrained to (e.g. IDomainEvent).</summary>
     private static Type ConstraintOf(Type openHandlerType) =>
         openHandlerType.GetGenericArguments()[0].GetGenericParameterConstraints().FirstOrDefault()
         ?? typeof(IDomiumEvent);
