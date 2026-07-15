@@ -22,6 +22,7 @@ public sealed class InMemoryEventBus(
 {
     private static readonly ConcurrentDictionary<(Type OpenHandlerType, Type EventType), HandlerInvoker> Invokers = new();
     private static readonly ConcurrentDictionary<Type, ExternalPublishInvoker> ExternalInvokers = new();
+    private static readonly ConcurrentDictionary<Type, Type> HandlerConstraints = new();
 
     private delegate Task HandlerInvoker(object handler, IDomiumEvent @event, CancellationToken cancellationToken);
     private delegate Task ExternalPublishInvoker(IExternalEventPublisher publisher, IExternalEvent @event, CancellationToken cancellationToken);
@@ -80,24 +81,41 @@ public sealed class InMemoryEventBus(
         }
     }
 
+    /// <summary>
+    /// Walks the event's type hierarchy, so a handler subscribed to a base event type also receives
+    /// every event derived from it, while a handler subscribed to a derived type receives only that
+    /// one. Stops as soon as a base type no longer satisfies the handler's event constraint.
+    /// </summary>
     private async Task DispatchAsync(
         Type openHandlerType,
         IDomiumEvent @event,
         CancellationToken cancellationToken)
     {
-        var invoker = Invokers.GetOrAdd((openHandlerType, @event.GetType()), BuildHandlerInvoker);
-        var handlerType = openHandlerType.MakeGenericType(@event.GetType());
+        var constraint = HandlerConstraints.GetOrAdd(openHandlerType, ConstraintOf);
 
-        foreach (var handler in serviceProvider.GetServices(handlerType))
+        for (var eventType = @event.GetType();
+             eventType is not null && constraint.IsAssignableFrom(eventType);
+             eventType = eventType.BaseType)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var invoker = Invokers.GetOrAdd((openHandlerType, eventType), BuildHandlerInvoker);
+            var handlerType = openHandlerType.MakeGenericType(eventType);
 
-            if (handler is not null)
+            foreach (var handler in serviceProvider.GetServices(handlerType))
             {
-                await invoker(handler, @event, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (handler is not null)
+                {
+                    await invoker(handler, @event, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
     }
+
+    /// <summary>The event interface a handler's type argument is constrained to (e.g. IDomainEvent).</summary>
+    private static Type ConstraintOf(Type openHandlerType) =>
+        openHandlerType.GetGenericArguments()[0].GetGenericParameterConstraints().FirstOrDefault()
+        ?? typeof(IDomiumEvent);
 
     private Task PublishExternalAsync(IExternalEvent externalEvent, CancellationToken cancellationToken)
     {
