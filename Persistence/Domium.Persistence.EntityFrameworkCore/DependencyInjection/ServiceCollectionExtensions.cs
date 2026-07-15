@@ -110,7 +110,10 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<SoftDeleteSaveChangesInterceptor>();
         services.TryAddScoped<AuditableSaveChangesInterceptor>();
         services.TryAddScoped<ConcurrencyVersionSaveChangesInterceptor>();
-        services.TryAddScoped<DomainServiceMaterializationInterceptor>();
+        // Singleton: the instance is part of the DbContextOptions cache key, so a per-scope instance
+        // would make EF build a new internal service provider each time. It is stateless and resolves
+        // scoped services from the context's application service provider.
+        services.TryAddSingleton<DomainServiceMaterializationInterceptor>();
 
         return services;
     }

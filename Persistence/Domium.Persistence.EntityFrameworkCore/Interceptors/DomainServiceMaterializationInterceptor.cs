@@ -1,6 +1,8 @@
 using Domium.Domain.Abstractions.DomainService;
 using Domium.Eventing.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
@@ -8,8 +10,14 @@ using System.Reflection;
 
 namespace Domium.Persistence.EntityFrameworkCore;
 
-public sealed class DomainServiceMaterializationInterceptor(IServiceProvider serviceProvider)
-    : IMaterializationInterceptor
+/// <summary>
+/// Injects <see cref="IEventBus"/> / <see cref="IDomainService"/> into materialized aggregates.
+/// Stateless on purpose: interceptor instances form part of the DbContextOptions cache key, so a
+/// new instance per DbContext makes EF build a new internal service provider each time
+/// (ManyServiceProvidersCreatedWarning after 20). Register it as a SINGLETON — scoped services are
+/// resolved per call from the context's own application service provider, not a captured one.
+/// </summary>
+public sealed class DomainServiceMaterializationInterceptor : IMaterializationInterceptor
 {
     private static readonly ConcurrentDictionary<Type, InjectableMember[]> InjectableMembers = new();
 
@@ -17,6 +25,13 @@ public sealed class DomainServiceMaterializationInterceptor(IServiceProvider ser
         MaterializationInterceptionData materializationData,
         object entity)
     {
+        var serviceProvider = GetApplicationServices(materializationData.Context);
+
+        if (serviceProvider is null)
+        {
+            return entity;
+        }
+
         foreach (var member in InjectableMembers.GetOrAdd(entity.GetType(), BuildInjectableMembers))
         {
             var service = ResolveService(serviceProvider, member.ServiceType);
@@ -29,6 +44,15 @@ public sealed class DomainServiceMaterializationInterceptor(IServiceProvider ser
 
         return entity;
     }
+
+    /// <summary>
+    /// The scope that created this DbContext. Resolving from here (rather than a captured provider)
+    /// keeps scoped services correct while letting the interceptor itself stay a singleton.
+    /// </summary>
+    private static IServiceProvider? GetApplicationServices(DbContext context) =>
+        context.GetService<IDbContextOptions>()
+               .FindExtension<CoreOptionsExtension>()
+               ?.ApplicationServiceProvider;
 
     private static object? ResolveService(
         IServiceProvider serviceProvider,
