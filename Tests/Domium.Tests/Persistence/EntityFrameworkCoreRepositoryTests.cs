@@ -67,7 +67,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
             true,
             provider.GetRequiredService<IEventBus>());
 
-        customer.Activate();
+        await customer.ActivateAsync();
 
         Assert.IsType<CustomerActivatedDomainEvent>(Assert.Single(CapturingEventBus.Events));
     }
@@ -82,25 +82,23 @@ public sealed class EntityFrameworkCoreRepositoryTests
             true,
             provider.GetRequiredService<IEventBus>());
 
-        Assert.Throws<InvalidOperationException>(() => customer.Activate());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => customer.ActivateAsync());
     }
 
     [Fact]
-    public async Task Aggregate_created_without_bus_buffers_events_until_save()
+    public async Task Aggregate_without_bus_throws_when_raising_events()
     {
         var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", true);
 
-        customer.Activate();
-
-        Assert.Single(customer.PendingDomainEvents);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => customer.ActivateAsync());
     }
 
     [Fact]
-    public async Task Buffered_domain_events_dispatch_before_save_in_same_transaction()
+    public async Task Domain_events_dispatch_in_scope_and_commit_with_the_aggregate()
     {
-        // Real in-memory bus + a handler that writes through the SAME DbContext: the
-        // interceptor publishes the buffered event right before SaveChanges, so the
-        // handler's audit row persists atomically with the aggregate.
+        // Real in-memory bus + a handler that writes through the SAME DbContext: RaiseEvent
+        // publishes immediately in the current scope, so the handler's audit row persists
+        // atomically with the aggregate when the unit of work commits.
         var services = new ServiceCollection();
         services.AddDomiumEventing();
         services.AddScoped<IDomainEventHandler<CustomerActivatedDomainEvent>, CustomerActivatedAuditHandler>();
@@ -112,18 +110,21 @@ public sealed class EntityFrameworkCoreRepositoryTests
         await using var provider = services.BuildServiceProvider();
         var repository = provider.GetRequiredService<IRepository<Customer, CustomerId>>();
         var unitOfWork = provider.GetRequiredService<IUnitOfWork>();
-        var customer = new Customer(new CustomerId(Guid.NewGuid()), "Ada", false);
+        var customer = new Customer(
+            new CustomerId(Guid.NewGuid()),
+            "Ada",
+            false,
+            provider.GetRequiredService<IEventBus>());
 
         await unitOfWork.BeginAsync();
         await repository.AddAsync(customer);
-        customer.Activate();
+        await customer.ActivateAsync();
         await unitOfWork.CommitAsync();
 
         var dbContext = provider.GetRequiredService<TestDbContext>();
         var audit = await dbContext.CustomerActivationAudits.SingleAsync();
 
         Assert.Equal(customer.Id, audit.CustomerId);
-        Assert.Empty(customer.PendingDomainEvents);
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         Assert.Equal("pricing", customer.DomainServiceName());
 
-        customer.Activate();
+        await customer.ActivateAsync();
 
         Assert.IsType<CustomerActivatedDomainEvent>(Assert.Single(CapturingEventBus.Events));
     }
@@ -378,10 +379,10 @@ public sealed class EntityFrameworkCoreRepositoryTests
 
         public bool IsActive { get; private set; }
 
-        public void Activate()
+        public async Task ActivateAsync()
         {
             IsActive = true;
-            RaiseEvent(new CustomerActivatedDomainEvent(Id));
+            await RaiseEvent(new CustomerActivatedDomainEvent(Id));
         }
 
         public string DomainServiceName() =>

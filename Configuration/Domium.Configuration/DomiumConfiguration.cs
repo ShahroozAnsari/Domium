@@ -299,6 +299,8 @@ public static class DomiumConfiguration
 
         if (options.LoggingEnabled)
         {
+            // The behaviors resolve ILogger<T>; harmless when the host already configured logging.
+            services.AddLogging();
             AddCommandBehavior(services, typeof(LoggingCommandBehavior<>), typeof(LoggingCommandBehavior<,>));
             services.TryAddEnumerable(
                 ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>)));
@@ -341,6 +343,9 @@ public static class DomiumConfiguration
     private static void RegisterIdempotency(IServiceCollection services, DomiumIdempotencyOptions options)
     {
         ValidateIdempotencyOptions(options);
+
+        // The behavior resolves ILogger<T>; harmless when the host already configured logging.
+        services.AddLogging();
 
         services.TryAddSingleton(
             new DomiumIdempotencyBehaviorOptions

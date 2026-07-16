@@ -5,20 +5,20 @@ namespace Domium.Domain;
 
 /// <summary>
 /// Base type for aggregate roots. Domain events raised through <see cref="RaiseEvent"/> are
-/// dispatched in-process, in the same DI scope as the current unit of work, so event handlers
-/// share the caller's DbContext and their changes commit in the same transaction.
+/// always published straight to the <see cref="IEventBus"/> — in-process, in the same DI scope
+/// as the current unit of work, so event handlers share the caller's DbContext and their
+/// changes commit in the same transaction. There is no buffering.
 ///
-/// Two dispatch paths keep that guarantee:
+/// Two ways an aggregate gets its bus:
 /// - Aggregates loaded from the database get an <see cref="IEventBus"/> injected by the EF
-///   materialization interceptor and publish immediately.
-/// - Freshly created aggregates (via <c>new</c>) have no bus yet; their events are buffered
-///   and published by <c>DomainEventDispatchInterceptor</c> right before SaveChanges — still
-///   inside the same scope and transaction.
+///   materialization interceptor.
+/// - Freshly created aggregates receive the bus through their static creational factory,
+///   which passes it to the <c>(id, eventBus)</c> constructor and raises the creation event
+///   via <see cref="CreateAsync{TAggregate}"/>.
 /// </summary>
 public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     where TId : IAggregateId
 {
-    private readonly List<IDomiumEvent> _pendingDomainEvents = new();
 
     protected AggregateRoot()
     {
@@ -40,36 +40,37 @@ public abstract class AggregateRoot<TId> : EntityBase<TId>, IAggregateRoot<TId>
     protected IEventBus? EventBus { get; private set; }
 
     /// <summary>
-    /// Events raised while no bus was attached, awaiting dispatch just before SaveChanges.
+    /// Creational helper for derived aggregates whose construction must raise an event:
+    /// build the aggregate with the <c>(id, eventBus)</c> constructor, then let this helper
+    /// publish the creation event and hand the aggregate back.
     /// </summary>
-    public IReadOnlyList<IDomiumEvent> PendingDomainEvents => _pendingDomainEvents;
-
-    /// <summary>
-    /// Returns the buffered events and clears the buffer. Called by the dispatch
-    /// interceptor right before SaveChanges, inside the same scope and transaction.
-    /// </summary>
-    public IReadOnlyList<IDomiumEvent> DequeuePendingDomainEvents()
+    protected static async Task<TAggregate> CreateAsync<TAggregate>(
+        TAggregate aggregate,
+        IDomiumEvent creationEvent)
+        where TAggregate : AggregateRoot<TId>
     {
-        var events = _pendingDomainEvents.ToArray();
-        _pendingDomainEvents.Clear();
-        return events;
+        if (aggregate == null) throw new ArgumentNullException(nameof(aggregate));
+
+        await aggregate.RaiseEvent(creationEvent);
+        return aggregate;
     }
 
     /// <summary>
-    /// Publishes the event immediately when a bus is attached; otherwise buffers it for
-    /// dispatch just before SaveChanges (same scope, same transaction).
+    /// Publishes the event immediately on the attached bus. Throws when no bus is attached —
+    /// load the aggregate through persistence or create it via its static factory.
     /// </summary>
     protected async Task RaiseEvent(IDomiumEvent @event)
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-        if (EventBus != null)
+        if (EventBus == null)
         {
-            await EventBus.PublishAsync(@event);
+            throw new InvalidOperationException(
+                "No event bus is attached to this aggregate. Load it through persistence " +
+                "(the materialization interceptor attaches the bus) or create it via its " +
+                "static creational factory.");
         }
-        else
-        {
-            _pendingDomainEvents.Add(@event);
-        }
+
+        await EventBus.PublishAsync(@event);
     }
 }
