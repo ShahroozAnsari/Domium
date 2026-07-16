@@ -26,6 +26,10 @@ namespace Microsoft.Extensions.Hosting
 
             builder.Services.AddServiceDiscovery();
 
+            // Domain rule violations become 409/404 ProblemDetails with the (localized)
+            // domain message instead of opaque 500s.
+            builder.Services.AddExceptionHandler<DomainExceptionHandler>();
+
             builder.Services.ConfigureHttpClientDefaults(http =>
             {
                 // Turn on resilience by default
