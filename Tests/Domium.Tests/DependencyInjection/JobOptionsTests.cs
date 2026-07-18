@@ -79,6 +79,69 @@ public sealed class JobOptionsTests
         Assert.False(nightly.Enabled);
     }
 
+    [Theory]
+    [InlineData(1, "*/1 * * * * *")]
+    [InlineData(5, "*/5 * * * * *")]
+    [InlineData(30, "*/30 * * * * *")]
+    [InlineData(60, "* * * * *")]
+    [InlineData(300, "*/5 * * * *")]
+    [InlineData(3600, "0 * * * *")]
+    [InlineData(7200, "0 */2 * * *")]
+    public void Interval_seconds_build_a_real_cron_expression(int intervalSeconds, string expected)
+    {
+        var options = new JobOptions { JobName = "X", IntervalSeconds = intervalSeconds };
+
+        Assert.Equal(expected, options.ResolveCronExpression());
+    }
+
+    [Fact]
+    public void Sub_minute_intervals_are_not_rounded_up_to_a_minute()
+    {
+        var options = new JobOptions { JobName = "X", IntervalSeconds = 5 };
+
+        Assert.NotEqual("* * * * *", options.ResolveCronExpression());
+        Assert.Equal("*/5 * * * * *", options.ResolveCronExpression());
+    }
+
+    [Fact]
+    public void Interval_seconds_take_precedence_over_a_cron_expression()
+    {
+        var options = new JobOptions
+        {
+            JobName = "X",
+            IntervalSeconds = 15,
+            CronExpression = "0 0 * * *"
+        };
+
+        Assert.Equal("*/15 * * * * *", options.ResolveCronExpression());
+    }
+
+    [Fact]
+    public void Cron_expression_is_used_when_no_interval_is_configured()
+    {
+        var options = new JobOptions { JobName = "X", CronExpression = "0 0 * * *" };
+
+        Assert.Equal("0 0 * * *", options.ResolveCronExpression());
+    }
+
+    [Fact]
+    public void Resolving_a_schedule_throws_when_neither_is_configured()
+    {
+        var options = new JobOptions { JobName = "Orphan" };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => options.ResolveCronExpression());
+
+        Assert.Contains("Orphan", exception.Message);
+    }
+
+    [Fact]
+    public void Run_at_startup_defaults_to_false()
+    {
+        var options = BuildOptions(AppSettings);
+
+        Assert.False(options.Get("ConfiguredJob").RunAtStartup);
+    }
+
     [Fact]
     public void Get_throws_when_the_job_is_not_configured()
     {
