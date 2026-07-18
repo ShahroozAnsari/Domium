@@ -27,6 +27,75 @@ public sealed class InMemoryEventBus(
     private delegate Task HandlerInvoker(object handler, IDomiumEvent @event, CancellationToken cancellationToken);
     private delegate Task ExternalPublishInvoker(IExternalEventPublisher publisher, IExternalEvent @event, CancellationToken cancellationToken);
 
+    private readonly List<Subscription> _subscriptions = new();
+
+    public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> listener)
+        where TEvent : IDomiumEvent
+    {
+        if (listener == null)
+        {
+            throw new ArgumentNullException(nameof(listener));
+        }
+
+        var subscription = new Subscription(
+            typeof(TEvent),
+            (@event, cancellationToken) => listener((TEvent)@event, cancellationToken),
+            Unsubscribe);
+
+        lock (_subscriptions)
+        {
+            _subscriptions.Add(subscription);
+        }
+
+        return subscription;
+    }
+
+    private void Unsubscribe(Subscription subscription)
+    {
+        lock (_subscriptions)
+        {
+            _subscriptions.Remove(subscription);
+        }
+    }
+
+    private async Task NotifySubscribersAsync(IDomiumEvent @event, CancellationToken cancellationToken)
+    {
+        Subscription[] subscriptions;
+
+        lock (_subscriptions)
+        {
+            if (_subscriptions.Count == 0)
+            {
+                return;
+            }
+
+            subscriptions = _subscriptions.ToArray();
+        }
+
+        foreach (var subscription in subscriptions)
+        {
+            if (!subscription.EventType.IsInstanceOfType(@event))
+            {
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await subscription.Listener(@event, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class Subscription(
+        Type eventType,
+        Func<IDomiumEvent, CancellationToken, Task> listener,
+        Action<Subscription> unsubscribe) : IDisposable
+    {
+        public Type EventType { get; } = eventType;
+
+        public Func<IDomiumEvent, CancellationToken, Task> Listener { get; } = listener;
+
+        public void Dispose() => unsubscribe(this);
+    }
+
     public async Task PublishAsync<TEvent>(
         TEvent @event,
         CancellationToken cancellationToken = default)
@@ -63,6 +132,8 @@ public sealed class InMemoryEventBus(
         {
             await PublishExternalAsync(externalEvent, cancellationToken).ConfigureAwait(false);
         }
+
+        await NotifySubscribersAsync(@event, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishAsync(

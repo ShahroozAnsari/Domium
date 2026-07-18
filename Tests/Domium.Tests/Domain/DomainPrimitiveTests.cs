@@ -155,6 +155,9 @@ public sealed class DomainPrimitiveTests
             return Task.CompletedTask;
         }
 
+        public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> listener)
+            where TEvent : IDomiumEvent => NullSubscription.Instance;
+
         public async Task PublishAsync(
             IReadOnlyCollection<IDomiumEvent> events,
             CancellationToken cancellationToken = default)
