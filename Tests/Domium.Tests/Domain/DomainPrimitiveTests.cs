@@ -1,4 +1,4 @@
-using Domium.Domain;
+﻿using Domium.Domain;
 using Domium.Domain.Abstractions.Events;
 using Domium.Eventing.Abstractions;
 
@@ -154,9 +154,6 @@ public sealed class DomainPrimitiveTests
             _events.Add(@event);
             return Task.CompletedTask;
         }
-
-        public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> listener)
-            where TEvent : IDomiumEvent => NullSubscription.Instance;
 
         public async Task PublishAsync(
             IReadOnlyCollection<IDomiumEvent> events,

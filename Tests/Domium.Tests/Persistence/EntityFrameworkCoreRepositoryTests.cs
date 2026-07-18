@@ -1,4 +1,4 @@
-using Domium.Application.Abstractions.Events;
+﻿using Domium.Application.Abstractions.Events;
 using Domium.Domain;
 using Domium.Domain.Abstractions.DomainService;
 using Domium.Domain.Abstractions.Entity;
@@ -499,9 +499,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
             return Task.CompletedTask;
         }
 
-        public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> listener)
-            where TEvent : IDomiumEvent => NullSubscription.Instance;
-
         public async Task PublishAsync(
             IReadOnlyCollection<IDomiumEvent> events,
             CancellationToken cancellationToken = default)
@@ -522,9 +519,6 @@ public sealed class EntityFrameworkCoreRepositoryTests
         {
             throw new InvalidOperationException("Dispatch failed.");
         }
-
-        public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> listener)
-            where TEvent : IDomiumEvent => NullSubscription.Instance;
 
         public async Task PublishAsync(
             IReadOnlyCollection<IDomiumEvent> events,
