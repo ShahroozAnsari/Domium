@@ -2,11 +2,15 @@ using Domium.Application.Abstractions.Command;
 using Domium.Application.Abstractions.Command.PipeLines;
 using Domium.Application.Abstractions.Command.Validation;
 using Domium.Application.Abstractions.Events;
+using Domium.Application.Abstractions.Job;
+using Domium.Application.Abstractions.Job.Pipelines;
 using Domium.Application.Abstractions.Query;
 using Domium.Application.Abstractions.Query.Pipelines;
 using Domium.Application.Abstractions.Query.Validation;
 using Domium.Application.Command;
 using Domium.Application.Command.Pipelines.Behaviors;
+using Domium.Application.Job;
+using Domium.Application.Job.Pipelines.Behaviors;
 using Domium.Application.Query;
 using Domium.Application.Query.Pipelines.Behaviors;
 using Domium.Caching.Abstractions;
@@ -49,6 +53,7 @@ public static class DomiumConfiguration
     {
         services.TryAddScoped<ICommandBus, CommandBus>();
         services.TryAddScoped<IQueryBus, QueryBus>();
+        services.TryAddScoped<IJobBus, JobBus>();
         services.AddDomiumEventing();
         services.AddDomiumTenancy();
     }
@@ -68,6 +73,7 @@ public static class DomiumConfiguration
         ValidateNoDuplicateHandlers(assemblies, typeof(ICommandHandler<>), "command");
         ValidateNoDuplicateHandlers(assemblies, typeof(ICommandHandler<,>), "command");
         ValidateNoDuplicateHandlers(assemblies, typeof(IQueryHandler<,>), "query");
+        ValidateNoDuplicateHandlers(assemblies, typeof(IJobHandler<>), "job");
 
         services.Scan(scan => scan
             .FromAssemblies(assemblies)
@@ -83,6 +89,11 @@ public static class DomiumConfiguration
             .WithScopedLifetime()
 
             .AddClasses(c => c.AssignableTo(typeof(IQueryHandler<,>)))
+            .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+
+            .AddClasses(c => c.AssignableTo(typeof(IJobHandler<>)))
             .UsingRegistrationStrategy(RegistrationStrategy.Skip)
             .AsImplementedInterfaces()
             .WithScopedLifetime()
@@ -286,6 +297,7 @@ public static class DomiumConfiguration
         {
             // Registered first so the activity span wraps every other behavior and the handler.
             AddCommandBehavior(services, typeof(ObservabilityCommandBehavior<>), typeof(ObservabilityCommandBehavior<,>));
+            AddJobBehavior(services, typeof(ObservabilityJobBehavior<>));
             services.TryAddEnumerable(
                 ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(ObservabilityQueryBehavior<,>)));
         }
@@ -302,6 +314,7 @@ public static class DomiumConfiguration
             // The behaviors resolve ILogger<T>; harmless when the host already configured logging.
             services.AddLogging();
             AddCommandBehavior(services, typeof(LoggingCommandBehavior<>), typeof(LoggingCommandBehavior<,>));
+            AddJobBehavior(services, typeof(LoggingJobBehavior<>));
             services.TryAddEnumerable(
                 ServiceDescriptor.Scoped(typeof(IQueryPipelineBehavior<,>), typeof(LoggingQueryBehavior<,>)));
         }
@@ -317,6 +330,7 @@ public static class DomiumConfiguration
         {
             ValidateTransactionRegistration(services);
             AddCommandBehavior(services, typeof(TransactionCommandBehavior<>), typeof(TransactionCommandBehavior<,>));
+            AddJobBehavior(services, typeof(TransactionJobBehavior<>));
         }
 
         if (options.CachingEnabled)
@@ -338,6 +352,11 @@ public static class DomiumConfiguration
     {
         services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(ICommandPipelineBehavior<>), voidBehavior));
         services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(ICommandPipelineBehavior<,>), resultBehavior));
+    }
+
+    private static void AddJobBehavior(IServiceCollection services, Type behavior)
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IJobPipelineBehavior<>), behavior));
     }
 
     private static void RegisterIdempotency(IServiceCollection services, DomiumIdempotencyOptions options)
@@ -427,6 +446,7 @@ public static class DomiumConfiguration
         ValidateNoDuplicateRegisteredHandlers(services, typeof(ICommandHandler<>), "command");
         ValidateNoDuplicateRegisteredHandlers(services, typeof(ICommandHandler<,>), "command");
         ValidateNoDuplicateRegisteredHandlers(services, typeof(IQueryHandler<,>), "query");
+        ValidateNoDuplicateRegisteredHandlers(services, typeof(IJobHandler<>), "job");
     }
 
     private static void ValidateNoDuplicateHandlers(

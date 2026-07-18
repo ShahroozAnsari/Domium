@@ -20,6 +20,10 @@ public static class DomiumTelemetry
         "domium.commands.executed",
         description: "Number of commands executed through Domium.");
 
+    public static readonly Counter<long> JobsExecuted = Meter.CreateCounter<long>(
+        "domium.jobs.executed",
+        description: "Number of jobs executed through Domium.");
+
     public static readonly Counter<long> QueriesExecuted = Meter.CreateCounter<long>(
         "domium.queries.executed",
         description: "Number of queries executed through Domium.");
