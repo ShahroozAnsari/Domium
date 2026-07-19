@@ -96,15 +96,17 @@ public abstract class BaseAggregateConfiguration<TEntity> : IEntityTypeConfigura
         if (isSoftDeletable)
         {
             builder.Property<bool>(DomiumShadowPropertyNames.IsDeleted).HasDefaultValue(false);
-            builder.Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt);
 
             // Soft-deleted aggregates are invisible to all queries unless the caller
             // explicitly opts out with IgnoreQueryFilters().
             builder.HasQueryFilter(entity => !EF.Property<bool>(entity, DomiumShadowPropertyNames.IsDeleted));
         }
 
+        // Deletion timestamps and actors are auditing concerns: an aggregate that only opts
+        // into soft delete records that it is deleted, not when or by whom.
         if (isAuditable && isSoftDeletable)
         {
+            builder.Property<DateTimeOffset?>(DomiumShadowPropertyNames.DeletedAt);
             builder.Property<string?>(DomiumShadowPropertyNames.DeletedBy).HasMaxLength(ActorMaxLength);
         }
 
