@@ -46,6 +46,10 @@
     <Project Path="Querying/Domium.Querying.EntityFrameworkCore/Domium.Querying.EntityFrameworkCore.csproj" />
     <Project Path="Querying/Domium.Querying/Domium.Querying.csproj" />
   </Folder>
+  <Folder Name="/src/Storage/">
+    <Project Path="Storage/Domium.Storage.Abstractions/Domium.Storage.Abstractions.csproj" />
+    <Project Path="Storage/Domium.Storage.Minio/Domium.Storage.Minio.csproj" />
+  </Folder>
   <Folder Name="/src/Tenancy/">
     <Project Path="Tenancy/Domium.Tenancy.Abstractions/Domium.Tenancy.Abstractions.csproj" />
     <Project Path="Tenancy/Domium.Tenancy/Domium.Tenancy.csproj" />
