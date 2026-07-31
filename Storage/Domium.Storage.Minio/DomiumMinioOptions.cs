@@ -20,7 +20,7 @@ public sealed class DomiumMinioOptions
     /// <summary>Bucket every blob lands in. Must be a valid S3 bucket name.</summary>
     public string Bucket { get; set; } = "routewerk";
 
-    /// <summary>Whether to talk TLS to the endpoint. False for the local Aspire container.</summary>
+    /// <summary>Whether to talk TLS to the endpoint. False for the local MinIO container.</summary>
     public bool UseSsl { get; set; }
 
     /// <summary>Throws when any required setting is missing.</summary>
