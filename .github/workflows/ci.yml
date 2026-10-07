@@ -94,11 +94,18 @@ jobs:
 
       - name: Test
         run: >
-          dotnet test Domium.slnx
+          dotnet test --solution Domium.slnx --max-parallel-test-modules 1 --report-xunit-trx
           --configuration ${{ env.CONFIGURATION }}
           --no-build
-          --logger "trx;LogFileName=test-results.trx"
           --results-directory artifacts/test-results
+          --coverlet --coverlet-output-format cobertura
+          --coverlet-include '[Domium.Domain]*' --coverlet-exclude '[*.Tests]*'
+
+      - name: Domain coverage report and gate
+        run: |
+          dotnet tool install dotnet-reportgenerator-globaltool --version 5.5.11 --tool-path "$RUNNER_TEMP/reportgenerator"
+          "$RUNNER_TEMP/reportgenerator/reportgenerator" '-reports:artifacts/test-results/coverage.cobertura.*.xml' '-targetdir:artifacts/test-results/report' '-reporttypes:Html;TextSummary;Cobertura'
+          python3 Tests/check-domain-coverage.py artifacts/test-results/report/Cobertura.xml Domium.Domain
 
       - name: Pack
         run: >
